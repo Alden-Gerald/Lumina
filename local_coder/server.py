@@ -54,7 +54,7 @@ class Handler(BaseHTTPRequestHandler):
             if path=="/":
                 html=(APP_ROOT/"local_coder/web/index.html").read_text().replace("__TOKEN__",self.server.token)
                 return self._send(200,html,"text/html; charset=utf-8")
-            if path in {"/app.js","/style.css","/time-format.js"}:
+            if path in {"/app.js","/response-actions.js","/style.css","/time-format.js"}:
                 mime="text/javascript" if path.endswith(".js") else "text/css"
                 return self._send(200,(APP_ROOT/"local_coder/web"/path[1:]).read_bytes(),mime)
             if path.startswith('/assets/'):
@@ -76,6 +76,18 @@ class Handler(BaseHTTPRequestHandler):
                     "hardware":__import__('local_coder.gpu_policy',fromlist=['inspect']).inspect()})
             if path=="/api/runs":return self._send(200,self.server.manager.list())
             if path=='/api/chats':return self._send(200,self.server.chats.list())
+            parts=path.strip('/').split('/')
+            if len(parts)==6 and parts[:2]==['api','chats'] and parts[3]=='responses':
+                id,message_id,kind=parts[2],parts[4],parts[5]
+                if kind=='feedback.json':
+                    body=json.dumps(self.server.chats.export_feedback(id,message_id),ensure_ascii=False,indent=2)
+                elif kind=='response.md':
+                    state=self.server.chats.get(id);_,m=self.server.chats.response(state,message_id)
+                    body=m['content']
+                    if m.get('sources'):body+='\n\nSources\n'+'\n'.join(f"[{i+1}] {source['title']}: {source['url']}" for i,source in enumerate(m['sources']))
+                else:raise ValueError('Unknown download format')
+                name,extension=('response','md') if kind=='response.md' else ('feedback','json')
+                return self._send(200,body,'application/octet-stream',{'Content-Disposition':f'attachment; filename="{name}-{message_id[:8]}.{extension}"'})
             if path.startswith('/api/chats/'):return self._send(200,self.server.chats.get(path[len('/api/chats/'):]))
             if path.startswith('/api/attachments/'):
                 image_id=path[len('/api/attachments/'):]
@@ -138,6 +150,17 @@ class Handler(BaseHTTPRequestHandler):
                     return self._send(202,self.server.chats.start(**data))
             parts=path.strip("/").split("/")
             if len(parts)==4 and parts[:2]==['api','chats'] and parts[3]=='cancel':return self._send(200,self.server.chats.cancel(parts[2]))
+            if len(parts)==4 and parts[:2]==['api','chats']:
+                action=parts[3];id=parts[2]
+                allowed={'feedback':{'message_id','rating','note'},'feedback-export':{'message_id'},
+                    'branch':{'message_id'},'redo':{'message_id','model','deep','web'}}
+                if action not in allowed:raise ValueError('Unknown response action')
+                if not isinstance(data,dict) or set(data)-allowed[action]:raise ValueError('Unknown response fields')
+                if action=='feedback':return self._send(200,self.server.chats.feedback(id,**data))
+                if action=='feedback-export':return self._send(200,self.server.chats.export_feedback(id,**data))
+                with self.server.activity_lock:
+                    if action=='redo' and self.server.manager.worker and self.server.manager.worker.is_alive():raise ValueError('A coding task is using the model. Wait for completion before redoing this reply.')
+                    return self._send(202 if action=='redo' else 201,self.server.chats.branch(id,redo=action=='redo',**data))
             if len(parts)==4 and parts[:2]==["api","runs"]:
                 if parts[3]=="cancel":return self._send(200,self.server.manager.cancel(parts[2]))
                 if parts[3]=="apply":return self._send(200,self.server.manager.apply(parts[2]))

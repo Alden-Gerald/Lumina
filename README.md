@@ -315,3 +315,49 @@ The Chat/Code separation and SearXNG approach were informed by the
 [Odysseus project](https://github.com/odysseus-dev/odysseus). This implementation
 adds these focused capabilities to the existing bounded agent; it does not
 install or copy Odysseus's broader workspace.
+
+## Response actions, feedback and conversation optimization
+
+Each completed Chat answer has thumbs up/down, **Redo in a new branch**, **Copy
+response**, and a **More** menu. Rating the same thumb again clears the rating.
+Rated answers have an optional correction/usefulness note saved locally. More
+can branch the conversation at that answer, download the answer as Markdown,
+export that answer's feedback as JSON, or expand its recorded activity log.
+Clipboard failures show selectable text instead of claiming a successful copy.
+
+Redo generates one bounded reply using the current model/Deep Thinking/search
+controls. It starts a new branch from the original question, excludes that
+answer and any later turns from the prompt, preserves prior context and saved
+attachments, and includes a saved feedback note if present. **Open original
+chat** returns to the untouched original. Branching without redo includes the
+selected answer and lets you explore a different follow-up. Ratings are separate
+for copied or regenerated answers. A failed/stopped retry preserves its original.
+
+Feedback is stored alongside its exact response in the private conversation
+file. Export records contain the rating/note, answer, real model/generation
+settings, exact inference messages, search snippets and selected file passages.
+Answers generated before this feature lack an exact input snapshot and their
+export explicitly reports `context_complete: false`; no context is invented.
+**Ratings do not update model weights automatically.** These records can support
+later human review or a separately designed, validated training process.
+
+The live **Machine activity** list shows actual recent operations, with
+icons; expand **Activity log** to inspect timestamps and recorded details. Each
+answer retains its own history. Code logs name the real tool operation (reading,
+editing, running a command, checking). Chat has no command-execution tools and
+does not fabricate such activity. Private thinking text is never logged.
+
+Before a Chat reply, automatic context optimization retains the system prompt,
+latest question/sources and recent complete exchanges. When older exchanges no
+longer fit, it adds a small CPU-selected memory of earlier excerpts, prioritizing
+the initial question and words relevant to the current question. The log reports
+how many exchanges/excerpts were retained and when optimization ran. This is
+extractive memory, not an exhaustive summary: details may be omitted, so repeat
+critical facts if needed. The complete original conversation remains on disk.
+No additional model is loaded and fixed context/GPU/16 GiB RAM limits remain.
+Oversized current questions/sources fail clearly instead of exceeding the budget.
+
+Code also reports its existing context compaction when it trims older tool turns;
+it retains its anchored task, plan, recent failure ledger and newest observations.
+All operations remain in the saved activity log. Compaction does not resume a
+stopped task or remove the existing action/time/patch/review limits.

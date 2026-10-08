@@ -137,3 +137,35 @@ was released after the reply, and no models remained loaded.
 - Local browser proof: `/home/gerald/.local/share/local-coder/attach-files-proof.png`.
   Answer proof: `file-study-answer-proof.png` in the same directory. Test documents
   contain generated, non-personal lecture and measurement data.
+
+## Response actions and context optimization (8 October 2026)
+
+- 62 tests passed, including persisted/cleared ratings, exact-context feedback
+  records, legacy message IDs, independent branches, redo of an earlier response
+  without later turns or its original answer, attachment preservation, failed
+  retries, active-worker guards, bounded context excerpts, code compaction logs,
+  and real API downloads. JavaScript syntax, Git whitespace and dependency checks
+  passed. No GPU/context/RAM profile was expanded.
+- Browser Copy placed the exact final answer on the clipboard. A negative rating
+  and correction note survived a reload in test conversation
+  `643759ad52e14ef682bc73dc79b83553`. Native Markdown and feedback JSON downloads
+  completed; the exported record contained the actual `qwen3.5:4b` model/settings,
+  exact input messages and no internal thinking text.
+- Real-model redo `7f95f891ee5944238a2a5015b94987de` answered in 7s and incorporated
+  the saved note, explicitly giving one volt = one joule per coulomb. The original
+  answer/rating remained intact. Branching without inference also passed in UI.
+- A separate synthetic long-history fixture (`29e2c1f4b64844b8b940e0ae1172023b`)
+  had ten deliberately oversized earlier exchanges plus locally attached neutral
+  study notes. CPU optimization retained 11 earlier excerpts, with estimated
+  input 1,013 tokens inside the 4B profile's 3,192-token input budget. The complete
+  22-message history remained saved; the answer correctly cited 37.5 V from the
+  attachment in 11s. A subsequent real redo (`7ea27698e047499489b7cad7ee732e6a`)
+  retained the same file and answered 37.5 V with a file citation in 7s.
+- The compact activity list kept file-reading and optimization events visible
+  after completion. The answer also showed an expandable conversation-memory
+  record. Browser proof: `response-optimization-proof.png` in the private data
+  directory. Fixtures and feedback notes are explicitly labeled UI verification.
+- A dashboard restart during this update interrupted user coding task
+  `6211e6421add4ca9b69c4ef7cfffe101`. The controller recovered it as needs-attention
+  with its isolated workspace/logs preserved; no automatic continuation or apply
+  was performed. Subsequent UI-only edits required no service restart.

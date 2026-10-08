@@ -26,6 +26,27 @@ class ChatTests(unittest.TestCase):
             self.assertEqual(len(calls[-1]),4);self.assertIn('Eigenvalues',calls[-1][2]['content'])
             self.assertEqual(c.get(s['id'])['history_pairs_used'],1)
             self.assertIn('untrusted',SYSTEM)
+    def test_live_activity_records_phases_but_no_private_thinking(self):
+        with tempfile.TemporaryDirectory() as d:
+            ready=threading.Event();release=threading.Event()
+            def infer(messages,deep,flag,deadline,progress):
+                progress({'answer':'','thinking_characters':20});ready.set();release.wait(2)
+                progress({'answer':'Hello','thinking_characters':20});return 'Hello there.',{}
+            c=Chats(Path(d)/'chats',infer);s=c.start('Hello there',deep=False)
+            self.assertTrue(ready.wait(1));live=c.get(s['id'])
+            self.assertNotIn(live['status'],{'idle','failed','cancelled'})
+            self.assertEqual(live['route']['choice'],'fast');self.assertIsNone(live['finished_at'])
+            self.assertEqual(live['generation_phase'],'thinking')
+            release.set();self.wait(c);result=c.get(s['id'])
+            self.assertEqual(result['status'],'idle');self.assertIsNotNone(result['finished_at'])
+            self.assertGreaterEqual(result['elapsed_seconds'],0)
+            events=result['messages'][-1]['work']['activity']
+            self.assertEqual(events[0]['message'],'Received your question')
+            self.assertEqual(events[-1]['phase'],'idle')
+            self.assertIn('Writing your answer',[event['message'] for event in events])
+            self.assertNotIn('thinking_characters',json.dumps(events))
+            c.start('Continue',id=s['id'],model='study');self.wait(c)
+            self.assertEqual(c.get(s['id'])['messages'][1]['work']['activity'],events)
     def test_web_sources_are_supplied_and_persisted_without_shell_tools(self):
         with tempfile.TemporaryDirectory() as d:
             seen=[]
@@ -43,18 +64,24 @@ class ChatTests(unittest.TestCase):
             def empty(*args):attempts.append(1);return '',{'truncated':True}
             c=Chats(Path(d)/'chats',empty);s=c.start('Question here');self.wait(c)
             self.assertEqual(len(attempts),2);self.assertEqual(c.get(s['id'])['status'],'failed')
+            failed=c.get(s['id']);self.assertEqual(failed['messages'][-1]['failed_work']['status'],'failed')
+            self.assertIsNotNone(failed['finished_at'])
             ready=threading.Event()
             def blocked(messages,deep,flag,*args):ready.set();flag.wait(2);raise ValueError('Cancelled')
             c.inference=blocked;s=c.start('Another question');self.assertTrue(ready.wait(1));c.cancel(s['id']);self.wait(c)
             self.assertEqual(c.get(s['id'])['status'],'cancelled')
+            self.assertEqual(c.get(s['id'])['messages'][-1]['failed_work']['status'],'cancelled')
     def test_invalid_inputs_and_restart_preserve_conversation(self):
         with tempfile.TemporaryDirectory() as d:
             c=Chats(Path(d)/'chats',lambda *_:('Answer',{}))
             for args in [{'text':'x'},{'text':'valid question','deep':'yes'},{'text':'valid question','attachments':['../escape']}]:
                 with self.assertRaises(ValueError):c.start(**args)
-            s=c.start('Valid question');self.wait(c);s=c.get(s['id']);s['status']='answering';c.save(s)
+            s=c.start('Valid question');self.wait(c);s=c.get(s['id']);s['status']='answering';s['started_at']=time.time()-70;c.save(s)
             restarted=Chats(Path(d)/'chats',lambda *_:('Answer',{}))
-            self.assertEqual(restarted.get(s['id'])['status'],'failed');self.assertEqual(len(restarted.list()),1)
+            recovered=restarted.get(s['id'])
+            self.assertEqual(recovered['status'],'failed');self.assertEqual(len(restarted.list()),1)
+            self.assertGreaterEqual(recovered['elapsed_seconds'],70)
+            self.assertEqual(recovered['messages'][-1]['work']['activity'][-1]['phase'],'failed')
     def test_search_rejects_private_links_and_unrelated_results(self):
         for url in ['http://localhost/','http://127.0.0.1/','http://169.254.169.254/','file:///etc/passwd','https://x@y.com/','javascript:alert(1)','http://router.local/']:
             self.assertFalse(public_url(url),url)

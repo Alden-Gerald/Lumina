@@ -4,7 +4,7 @@ Verified 8 October 2026 on Fedora 44, Ryzen 7 5800X, RX 6600 8GB, 32GB system RA
 
 | Actual check | Result |
 | --- | --- |
-| Agent/sandbox/compiler/API/MCP/inference/chat/image tests | 38 passed |
+| Agent/sandbox/compiler/API/MCP/inference/chat/image tests | 44 passed |
 | 14B, 16k coding benchmark | Completed in four actions; independent behavior checks passed |
 | 30B Q4_K_M, 16k coding benchmark | Completed in four actions; independent behavior checks passed |
 | 30B Q4_K_M, 32k dashboard coding benchmark | Completed in four actions; independent behavior checks passed |
@@ -75,3 +75,35 @@ peak was only 1.04 GiB on this cached run; this is not the full resident model
 footprint because previously cached file pages can be charged elsewhere.
 The private service retained its 16 GiB cgroup ceiling throughout. The reservation
 was released after the reply, and no models remained loaded.
+
+
+## Chat controls and activity (8 October 2026)
+
+- 44 automated tests passed, including Auto routing under missing-model and
+  RAM constraints, manual model capability/limits, progress history persistence,
+  cancellation/failure/restart recovery, and duration boundaries through hours.
+  JavaScript syntax and Git whitespace checks passed.
+- Actual browser file selection and clipboard PNG paste both displayed the
+  attachment **inside** the Chat composer above its textarea. No separate Chat
+  attachment panel was visible. No browser errors occurred.
+- Auto direct greeting `2d5a6a7dd57d4f30a44b96e4b57824fc` chose the installed
+  `qwen3.5:4b` model and completed in 7s. No additional model was downloaded.
+- Auto study/search `99ffdb84ed334d489e7f49f6612be7ed` chose `qwen3:14b` and
+  completed in 1m 33sec. Google returned access denied; Yahoo reported certificate
+  validation failure; the labeled Mwmbl fallback supplied two sources, including
+  MIT OpenCourseWare. The answer cited that source. Browser and controller both
+  showed partial answer text **before** completion, with Working, Writing your
+  answer, a cursor, live elapsed minutes/seconds, and actual activity entries.
+  RX VRAM peaked at 5.68 GiB during sampling. This was dual Vulkan mode; GTX VRAM
+  was not exposed by the AMD sysfs counter and is not inferred from this value.
+- Deliberately oversized manual 4B request
+  `a51a9080333a430f99bddf84b8e9a87a` failed in 1s with a context-budget
+  explanation and an enabled retry composer. It did not generate an answer.
+- Cancellation `caed854755904a669aa0786f8809c17d` ended in 0s, displayed
+  **Stopped**, hid the Stop button, and restored Send. Manual Coding 30B disabled
+  Deep Thinking and explained that the model answers directly.
+- The inference service still has MemoryMax=16 GiB, MemoryHigh=14 GiB, no swap,
+  and one loaded model/request. Existing GPU/context profiles remain fixed;
+  Auto does not expand VRAM or raise those limits.
+- Visual proofs are local: `chat-working-proof.png` and
+  `chat-progress-proof.png` under `/home/gerald/.local/share/local-coder`.

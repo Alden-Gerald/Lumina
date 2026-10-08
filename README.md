@@ -200,20 +200,42 @@ Model metadata: [Qwen3-Coder tags](https://ollama.com/library/qwen3-coder/tags),
 
 ## Chat and study mode
 
-The dashboard has **Chat** and **Code** tabs. Mathematics is rendered locally using vendored KaTeX 0.19.0 (MIT license, package integrity checked). Chat uses `qwen3:14b` (14.8B,
+The dashboard has **Chat** and **Code** tabs. Mathematics is rendered locally using vendored KaTeX 0.19.0 (MIT license, package integrity checked).
+
+Chat's **AI model** selector defaults to **Auto**. Auto chooses from installed
+models within the available host RAM budget: Deep Thinking and study questions
+prefer `qwen3:14b`; short greetings/translation without Deep Thinking prefer
+`qwen3.5:4b`; coding questions without Deep Thinking prefer the 30B coding model,
+then the 14B coding model. Longer conversation history keeps greetings on the
+study model. You can select a model manually; unavailable choices are disabled.
+Auto uses deterministic routing, not a separate model. The actual selected model
+and reason appear in the activity log. Coding models answer directly, so their
+Deep Thinking control is disabled. Chat remains a conversation: use **Code** to
+edit project files.
+
+The default study model is `qwen3:14b` (14.8B,
 Q4_K_M) with a 16,384-token context, 24 RX-only GPU layers (32 verified in dual
 mode), CPU offload, and the same private inference service capped at 16 GiB.
-Chat needs at least 12 GiB available host RAM. It has no file-editing or terminal
+Study 14B needs at least 12 GiB available host RAM; Quick chat and Coding 14B need 8 GiB, and Coding 30B needs 16 GiB. Quick chat uses the already installed 4B image model in text mode, with an 8k context and the same 16-layer GPU cap. It has no file-editing or terminal
 tools. Paste lecture notes, ask worked problems, or request practice questions.
 Conversation history is saved locally and complete recent exchanges are retained
 within the context budget. After 50 exchanges, start a new chat.
 
-**Reason carefully** enables the model's thinking capability. Thinking and final
+**Deep Thinking** enables the model's thinking capability. Thinking and final
 answer share a 4,096-token limit; direct mode has a 2,048-token limit. Each reply
 has a 15-minute deadline and a Stop button. Internal thinking text is not displayed
 or saved. If reasoning consumes its limit without producing an answer, the app
 tries one bounded direct answer using the remaining time. A length-limited answer
-is labeled; ask a follow-up to continue. Reasoning does not guarantee correctness.
+is labeled; ask a follow-up to continue. The control explicitly warns that Deep
+Thinking takes longer. Reasoning does not guarantee correctness.
+
+Chat shows **Working / Done / Failed / Stopped**, an animated stage indicator,
+and streamed answer text with a writing cursor. Expand **Working for / Worked
+for** to see actual model selection, image reading, search queries, retrieved
+source counts and engine warnings, thinking/writing stages, and memory release.
+Completed and failed turns retain their own activity history. Internal reasoning
+is not exposed. The running timer updates every second and freezes at completion:
+`10s`, `1m 10sec`, `1hr 5min 15sec`. Service restarts mark interrupted work failed.
 
 **Google web search** is optional and off by default. It plans one search query
 (or up to three with reasoning), searches through a local SearXNG service, then
@@ -235,7 +257,9 @@ at the API boundary so their models never intentionally overlap in memory.
 ## Image attachments
 
 Both modes support **Attach images**, pasting a screenshot, and dropping images
-onto the attachment area. Up to two PNG, JPEG or WebP images can be attached,
+onto the attachment area. In Chat, image previews appear above your text inside
+the same composer. Paste into the text box or use its plus button; there is no
+separate image panel. Up to two PNG, JPEG or WebP images can be attached,
 4 MiB each. Images are decoded, stripped of metadata, resized to at most 1024px
 on their longest edge, and kept privately in the local data directory. Animated
 images, SVG, and files exceeding 12 million pixels are rejected.

@@ -6,17 +6,21 @@ import json
 from pathlib import Path
 import secrets
 import shlex
-from urllib.parse import urlparse
+from urllib.parse import urlparse, unquote
+import threading
 
 from .controller import Manager
 from . import ollama
 from .settings import APP_ROOT, DATA_ROOT, PROFILES, DEFAULT_PROJECT
 from .sandbox import Sandbox
+from .images import ImageStore, MAX_UPLOAD_BYTES
+from .chat import Chats
 
 class Server(ThreadingHTTPServer):
     daemon_threads=True
     def __init__(self,address):
-        self.manager=Manager();self.token=secrets.token_hex(32)
+        self.manager=Manager();self.chats=Chats(DATA_ROOT/'chats');self.activity_lock=threading.RLock();self.token=secrets.token_hex(32)
+        self.images=ImageStore(DATA_ROOT/'attachments');self.upload_slots=threading.BoundedSemaphore(2)
         DATA_ROOT.mkdir(parents=True,exist_ok=True,mode=0o700)
         token=DATA_ROOT/"server-token";token.write_text(self.token);token.chmod(0o600)
         super().__init__(address,Handler)
@@ -51,15 +55,29 @@ class Handler(BaseHTTPRequestHandler):
             if path in {"/app.js","/style.css"}:
                 mime="text/javascript" if path.endswith(".js") else "text/css"
                 return self._send(200,(APP_ROOT/"local_coder/web"/path[1:]).read_bytes(),mime)
+            if path.startswith('/assets/'):
+                root=(APP_ROOT/'local_coder/web/assets').resolve();asset=(root/path[len('/assets/'):]).resolve()
+                if not asset.is_relative_to(root) or not asset.is_file():raise ValueError('Invalid asset')
+                mime={'.js':'text/javascript','.css':'text/css','.woff2':'font/woff2'}.get(asset.suffix)
+                if not mime:return self._send(404,{'error':'Not found'})
+                return self._send(200,asset.read_bytes(),mime)
             if path=="/api/info":
                 try:models=ollama.api("/api/tags").get("models",[]);error=None
                 except OSError as exc:models=[];error=str(exc)
                 names={m["name"] for m in models}
                 return self._send(200,{"project":str(DEFAULT_PROJECT),"profiles":{
-                    k:{**v,"installed":v["model"] in names} for k,v in PROFILES.items()},
+                    k:{**v,"installed":v["model"] in names} for k,v in PROFILES.items() if not v.get('auxiliary')},
+                    "vision":{"model":PROFILES['_vision']['model'],'installed':PROFILES['_vision']['model'] in names},
+                    "chat_model":{"model":PROFILES['_chat']['model'],'installed':PROFILES['_chat']['model'] in names},
                     "gpu":ollama.gpu_usage(),"ram_budget_gib":16,"error":error,
                     "hardware":__import__('local_coder.gpu_policy',fromlist=['inspect']).inspect()})
             if path=="/api/runs":return self._send(200,self.server.manager.list())
+            if path=='/api/chats':return self._send(200,self.server.chats.list())
+            if path.startswith('/api/chats/'):return self._send(200,self.server.chats.get(path[len('/api/chats/'):]))
+            if path.startswith('/api/attachments/'):
+                image_id=path[len('/api/attachments/'):]
+                self.server.images.load(image_id)
+                return self._send(200,self.server.images.path(image_id).read_bytes(),'image/jpeg')
             parts=path.strip("/").split("/")
             if len(parts)>=3 and parts[:2]==["api","runs"]:
                 run_id=parts[2]
@@ -76,6 +94,14 @@ class Handler(BaseHTTPRequestHandler):
             if not hmac.compare_digest(self.headers.get("X-Local-Coder-Token",""),self.server.token):
                 return self._send(403,{"error":"Missing local session token"})
             size=int(self.headers.get("Content-Length","0"))
+            path=urlparse(self.path).path
+            if path=='/api/attachments':
+                if not 0<size<=MAX_UPLOAD_BYTES:raise ValueError('Choose an image under 4MB')
+                if not self.server.upload_slots.acquire(blocking=False):return self._send(429,{'error':'Another image is uploading; try again shortly'})
+                try:
+                    self.connection.settimeout(15)
+                    return self._send(201,self.server.images.save(self.rfile.read(size),unquote(self.headers.get('X-Upload-Name','Screenshot'))))
+                finally:self.server.upload_slots.release()
             if not 0<size<=20000:raise ValueError("Request is empty or too large")
             if self.headers.get_content_type()!="application/json":raise ValueError("JSON required")
             data=json.loads(self.rfile.read(size));path=urlparse(self.path).path
@@ -84,6 +110,8 @@ class Handler(BaseHTTPRequestHandler):
                 active=self.server.manager.worker
                 if current().get("mode")=="dual-vulkan" and active and active.is_alive():
                     for flag in self.server.manager.cancel_flags.values():flag.set()
+                if current().get('mode')=='dual-vulkan':
+                    for flag in self.server.chats.flags.values():flag.set()
                 return self._send(200,reserve())
             if path=="/api/gpu/release":
                 from .gpu_policy import release
@@ -92,10 +120,18 @@ class Handler(BaseHTTPRequestHandler):
                 command=data.pop("check_command","")
                 if command:
                     data["test_commands"]=[shlex.split(command)]
-                allowed={"task","source","profile","project_profile","test_commands","acceptance"}
+                allowed={"task","source","profile","project_profile","test_commands","acceptance","attachments"}
                 if set(data)-allowed:raise ValueError("Unknown task fields")
-                return self._send(202,self.server.manager.start(**data))
+                with self.server.activity_lock:
+                    if self.server.chats.worker and self.server.chats.worker.is_alive():raise ValueError('Chat is using the model. Stop it or wait for the reply before coding.')
+                    return self._send(202,self.server.manager.start(**data))
+            if path=='/api/chats':
+                if set(data)-{'text','id','deep','web','attachments'}:raise ValueError('Unknown chat fields')
+                with self.server.activity_lock:
+                    if self.server.manager.worker and self.server.manager.worker.is_alive():raise ValueError('A coding task is using the model. Stop it or wait for completion before chatting.')
+                    return self._send(202,self.server.chats.start(**data))
             parts=path.strip("/").split("/")
+            if len(parts)==4 and parts[:2]==['api','chats'] and parts[3]=='cancel':return self._send(200,self.server.chats.cancel(parts[2]))
             if len(parts)==4 and parts[:2]==["api","runs"]:
                 if parts[3]=="cancel":return self._send(200,self.server.manager.cancel(parts[2]))
                 if parts[3]=="apply":return self._send(200,self.server.manager.apply(parts[2]))
@@ -111,4 +147,5 @@ def serve(host="127.0.0.1",port=8787):
     except KeyboardInterrupt:pass
     finally:
         for flag in server.manager.cancel_flags.values():flag.set()
+        for flag in server.chats.flags.values():flag.set()
         server.server_close()

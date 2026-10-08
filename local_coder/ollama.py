@@ -14,11 +14,11 @@ HTTP = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 class InferenceError(RuntimeError):
     pass
 
-async def _stream_chat(payload,cancel_event,deadline,progress):
+async def _stream_chat(payload,cancel_event,deadline,progress,allow_thinking=False):
     import httpx
-    pieces=[];final=None;started=time.monotonic();last_progress=0
+    pieces=[];final=None;started=time.monotonic();last_progress=0;thinking_characters=0
     async def reader():
-        nonlocal final
+        nonlocal final,thinking_characters
         async with httpx.AsyncClient(trust_env=False,timeout=httpx.Timeout(900,connect=5)) as client:
             async with client.stream('POST',OLLAMA_URL+'/api/chat',json=payload) as response:
                 response.raise_for_status()
@@ -27,7 +27,10 @@ async def _stream_chat(payload,cancel_event,deadline,progress):
                     if len(line.encode())>65536:raise InferenceError('Oversized inference chunk')
                     chunk=json.loads(line)
                     if chunk.get('error'):raise InferenceError(chunk['error'])
-                    if chunk.get('message',{}).get('thinking'):
+                    thinking=chunk.get('message',{}).get('thinking','')
+                    thinking_characters+=len(thinking)
+                    if thinking_characters>60000:raise InferenceError('Reasoning budget exhausted')
+                    if thinking and not allow_thinking:
                         raise InferenceError('Unexpected thinking output; bounded action mode is required')
                     pieces.append(chunk.get('message',{}).get('content',''))
                     if sum(map(len,pieces))>24000:raise InferenceError('Action output is oversized')
@@ -40,7 +43,9 @@ async def _stream_chat(payload,cancel_event,deadline,progress):
             if (deadline and now>=deadline) or now-started>=900:
                 raise InferenceError('Task time budget exhausted')
             if progress and now-last_progress>=5:
-                progress({'generated_characters':sum(map(len,pieces)),'elapsed_seconds':round(now-started)})
+                details={'generated_characters':sum(map(len,pieces)),'elapsed_seconds':round(now-started)}
+                if allow_thinking:details.update(answer=''.join(pieces),thinking_characters=thinking_characters)
+                progress(details)
                 last_progress=now
             done,_=await asyncio.wait({task},timeout=.25)
             if done:
@@ -86,7 +91,7 @@ def ensure_host_capacity(profile):
     from pathlib import Path
     fields=dict(line.split(":",1) for line in Path("/proc/meminfo").read_text().splitlines())
     available=int(fields["MemAvailable"].split()[0])*1024
-    required=(16 if profile=="power" else 8)*1024**3
+    required=(16 if profile=="power" else 12 if profile=='_chat' else 8)*1024**3
     if available<required:
         raise InferenceError("Too little available host RAM for this profile. Close memory-heavy apps or use the 14B profile while the VM is running.")
     return {"available_bytes":available,"minimum_available_bytes":required}
@@ -127,3 +132,21 @@ def complete(messages, schema, profile="quality", cancel_event=None, deadline=No
     return parsed, {"model":cfg["model"],"eval_count":final.get("eval_count",0),
                     "prompt_eval_count":final.get("prompt_eval_count",0),"estimated_input_tokens":estimated,
                     "seconds":round(time.monotonic()-started,2),"gpu":gpu_usage(),"options":options}
+
+def chat(messages, deep, cancel_event=None, deadline=None, progress=None):
+    """Text chat has no file/command tools; thinking and output share a fixed token cap."""
+    cfg=PROFILES['_chat']
+    from .context import estimate
+    estimated=estimate(messages,None,'_chat')
+    if estimated>cfg['num_ctx']-5000:raise InferenceError('Conversation exceeds the safe context budget')
+    from .gpu_policy import current
+    options={'num_ctx':cfg['num_ctx'],'num_gpu':cfg['dual_num_gpu'] if current().get('mode')=='dual-vulkan' else cfg['num_gpu'],
+             'num_predict':4096 if deep else 2048,'num_batch':128,'num_thread':8,'temperature':.6,'repeat_penalty':1.08}
+    payload={'model':cfg['model'],'messages':messages,'think':bool(deep),'stream':True,'keep_alive':'30s','options':options}
+    started=time.monotonic()
+    pieces,final=asyncio.run(_stream_chat(payload,cancel_event,deadline,progress,allow_thinking=True))
+    if not final:raise InferenceError('Local model ended without a complete response')
+    answer=''.join(pieces).strip()
+    return answer,{'model':cfg['model'],'seconds':round(time.monotonic()-started,2),'eval_count':final.get('eval_count',0),
+        'prompt_eval_count':final.get('prompt_eval_count',0),'estimated_input_tokens':estimated,
+        'truncated':final.get('done_reason')=='length','gpu':gpu_usage(),'options':options}

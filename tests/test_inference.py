@@ -10,11 +10,12 @@ from local_coder import ollama
 class Handler(BaseHTTPRequestHandler):
     def log_message(self,*args):pass
     def do_POST(self):
-        self.rfile.read(int(self.headers['Content-Length']))
+        self.server.payload=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
         self.send_response(200);self.send_header('Content-Type','application/x-ndjson');self.end_headers()
         self.server.headers_sent.set()
         self.server.release.wait(3)
         try:
+            if getattr(self.server,'thinking',False):self.wfile.write((json.dumps({'message':{'thinking':'Private test reasoning'}})+'\n').encode())
             self.wfile.write((json.dumps({'message':{'content':'{"answer":42}'}})+'\n'+
                 json.dumps({'done':True,'done_reason':self.server.reason,'eval_count':5})+'\n').encode())
             self.wfile.flush()
@@ -46,3 +47,13 @@ class InferenceTests(unittest.TestCase):
         self.assertFalse(thread.is_alive(),'Cancellation remained blocked on model output')
         self.assertLess(time.monotonic()-started,1.5)
         self.assertIsInstance(out.get(),ollama.InferenceError)
+    def test_chat_accepts_bounded_thinking_without_returning_its_transcript(self):
+        self.server.thinking=True;self.server.release.set()
+        with patch('local_coder.gpu_policy.current',return_value={'mode':'rx-only'}):
+            answer,metrics=ollama.chat([{'role':'user','content':'Compute 6 times 7'}],True,deadline=time.monotonic()+5)
+        self.assertEqual(answer,'{"answer":42}');self.assertNotIn('Private',str(metrics)+answer)
+        self.assertEqual(self.server.payload['options']['num_predict'],4096)
+        self.assertEqual(self.server.payload['options']['num_gpu'],24)
+        self.assertEqual(self.server.payload['options']['num_ctx'],16384)
+        self.assertTrue(self.server.payload['think'])
+        with self.assertRaisesRegex(ollama.InferenceError,'Unexpected thinking'):self.call()

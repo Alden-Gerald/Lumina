@@ -52,8 +52,11 @@ to Linux. This is layer distribution, not a unified 12GB GPU. The slower GTX
 can increase capacity without increasing speed; dual mode requires a real
 benchmark before any speed claim. CPU offload continues in either mode.
 
-On this machine the GTX is presently **bound to VFIO at boot**, and Linux cannot
-use it just because Windows is shut down. The RX-only path is fully operational.
+The initial setup had the GTX **bound to VFIO at boot**. During the later Chat
+validation both cards were host-visible with nouveau/NVK and real mixed-GPU
+inference completed. Linux cannot use a VFIO-owned card just because Windows is
+shut down. A side-by-side speed comparison and a live Windows handback test are
+still pending. The RX-only path is fully operational.
 An administrator can return the secondary GPU to nouveau/NVK while all VMs are
 off:
 
@@ -194,3 +197,61 @@ Model metadata: [Qwen3-Coder tags](https://ollama.com/library/qwen3-coder/tags),
 [Ollama GPU support](https://docs.ollama.com/gpu),
 [Ollama context and KV cache settings](https://docs.ollama.com/faq),
 [Mesa NVK support](https://docs.mesa3d.org/drivers/nvk.html).
+
+## Chat and study mode
+
+The dashboard has **Chat** and **Code** tabs. Mathematics is rendered locally using vendored KaTeX 0.19.0 (MIT license, package integrity checked). Chat uses `qwen3:14b` (14.8B,
+Q4_K_M) with a 16,384-token context, 24 RX-only GPU layers (32 verified in dual
+mode), CPU offload, and the same private inference service capped at 16 GiB.
+Chat needs at least 12 GiB available host RAM. It has no file-editing or terminal
+tools. Paste lecture notes, ask worked problems, or request practice questions.
+Conversation history is saved locally and complete recent exchanges are retained
+within the context budget. After 50 exchanges, start a new chat.
+
+**Reason carefully** enables the model's thinking capability. Thinking and final
+answer share a 4,096-token limit; direct mode has a 2,048-token limit. Each reply
+has a 15-minute deadline and a Stop button. Internal thinking text is not displayed
+or saved. If reasoning consumes its limit without producing an answer, the app
+tries one bounded direct answer using the remaining time. A length-limited answer
+is labeled; ask a follow-up to continue. Reasoning does not guarantee correctness.
+
+**Google web search** is optional and off by default. It plans one search query
+(or up to three with reasoning), searches through a local SearXNG service, then
+synthesizes search snippets with numbered citations and expandable source links.
+Only queries go to search engines; model inference stays local. Google is tried
+first. On this connection Google currently rejects the SearXNG WML endpoint, so
+Yahoo/Startpage, Mwmbl/Wikipedia, then Bing/DuckDuckGo are available as clearly labeled fallbacks.
+Obviously unrelated results are discarded. Search failures are shown rather than
+invented. This is bounded web-assisted chat, not exhaustive full-page research:
+the app reads search snippets, not full articles or PDF links.
+
+Search runs on loopback port 8788 with a separate 512 MiB memory ceiling and one
+CPU core quota. Pinned source version and dependency lock are recorded in
+`/home/gerald/.local/share/local-coder/search-version.txt` and
+`search-requirements.lock.txt`; settings are `search-settings.yml` there.
+`local-coder-search.service` starts at user login. Chat and Code are serialized
+at the API boundary so their models never intentionally overlap in memory.
+
+## Image attachments
+
+Both modes support **Attach images**, pasting a screenshot, and dropping images
+onto the attachment area. Up to two PNG, JPEG or WebP images can be attached,
+4 MiB each. Images are decoded, stripped of metadata, resized to at most 1024px
+on their longest edge, and kept privately in the local data directory. Animated
+images, SVG, and files exceeding 12 million pixels are rejected.
+
+A separate `qwen3.5:4b` Q4_K_M local vision model reads each image with an 8k
+context and 16 GPU layers. It unloads before the coding or study model starts.
+The larger text models receive its description and visible text. This keeps
+image processing within the same memory budget; the 30B coding model itself is
+not a vision model. Very small screenshot text may need a tighter crop.
+
+Attachments and conversations remain on disk for task history; clearing the
+composer does not delete an attachment already associated with a saved task.
+Private data lives under `/home/gerald/.local/share/local-coder`, outside this Git
+repository. Do not expose the model, search or dashboard ports to your network.
+
+The Chat/Code separation and SearXNG approach were informed by the
+[Odysseus project](https://github.com/odysseus-dev/odysseus). This implementation
+adds these focused capabilities to the existing bounded agent; it does not
+install or copy Odysseus's broader workspace.

@@ -7,13 +7,13 @@ name = "local-coder"
 version = "0.1.0"
 description = "Bounded local coding agent for an RX 6600 and Quickshell"
 requires-python = ">=3.11"
-dependencies = ["mcp>=2.3,<3", "tokenizers>=0.22,<1", "httpx>=0.28,<1"]
+dependencies = ["mcp>=2.3,<3", "tokenizers>=0.22,<1", "httpx>=0.28,<1", "Pillow>=12,<14"]
 
 [project.scripts]
 local-coder = "local_coder.cli:main"
 
 [tool.setuptools.package-data]
-local_coder = ["web/*.html", "web/*.css", "web/*.js"]
+local_coder = ["web/*.html", "web/*.css", "web/*.js", "web/assets/katex/*", "web/assets/katex/contrib/*", "web/assets/katex/fonts/*"]
 
 [tool.setuptools.packages.find]
 include = ["local_coder*"]

@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# Run with sudo while ALL VMs are off. Bind only this machine's secondary GPU.
+set -Eeuo pipefail
+export LC_ALL=C
+readonly PCI=0000:04:00.0
+readonly DEV=/sys/bus/pci/devices/${PCI}
+[[ $EUID == 0 ]] || { echo 'Run this script with sudo.' >&2; exit 1; }
+exec 9>/run/local-coder-gtx.lock
+flock -n 9 || { echo 'Another GPU handoff is running.' >&2; exit 1; }
+[[ $(cat "$DEV/vendor") == 0x10de && $(cat "$DEV/device") == 0x1c82 ]] || {
+    echo 'Expected GTX 1050 Ti was not found. No device changed.' >&2; exit 1;
+}
+# Conservative: do not change PCI ownership while ANY VM is active or suspended.
+active=$(virsh -c qemu:///system list --name)
+[[ -z "$active" ]] || { echo 'Shut down all VMs before returning the GTX to Linux.' >&2; exit 1; }
+[[ $(cat "$DEV/boot_vga") == 0 ]] || { echo 'Refusing to rebind the boot display GPU.' >&2; exit 1; }
+driver=$(basename "$(readlink -f "$DEV/driver")")
+case "$driver" in
+    nouveau) echo 'GTX is already using nouveau; no device changed.'; exit 0 ;;
+    vfio-pci) ;;
+    *) echo "Unexpected driver: $driver. No device changed." >&2; exit 1 ;;
+esac
+modprobe nouveau
+restore() {
+    local rc=$?
+    trap - ERR
+    echo 'Host binding failed; returning the GTX to VFIO.' >&2
+    if [[ -e "$DEV/driver/unbind" ]]; then printf '%s' "$PCI" > "$DEV/driver/unbind" || true; fi
+    printf '%s' vfio-pci > "$DEV/driver_override" || true
+    printf '%s' "$PCI" > /sys/bus/pci/drivers_probe || true
+    printf '\n' > "$DEV/driver_override" || true
+    exit "$rc"
+}
+trap restore ERR
+printf '%s' nouveau > "$DEV/driver_override"
+printf '%s' "$PCI" > "$DEV/driver/unbind"
+printf '%s' "$PCI" > /sys/bus/pci/drivers_probe
+[[ $(basename "$(readlink -f "$DEV/driver")") == nouveau ]]
+printf '\n' > "$DEV/driver_override"
+trap - ERR
+echo 'GTX returned to Linux. The audio function stays with VFIO.'
+echo 'Run local-coder vm-release as gerald. The next task rediscovers Vulkan GPUs.'

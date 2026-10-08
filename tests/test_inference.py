@@ -31,6 +31,22 @@ class InferenceTests(unittest.TestCase):
         self.server.release.set();self.server.shutdown();self.server.server_close();self.thread.join();self.address.stop()
     def call(self,flag=None):
         return ollama.complete([{'role':'user','content':'Return a number'}],{'type':'object'},'power',flag,time.monotonic()+5)
+    def test_helper_cpu_fallback_is_rejected_before_generating(self):
+        seen=[]
+        async def stream(payload,*args,**kwargs):
+            seen.append(payload)
+            return [],{'done':True,'done_reason':'load'}
+        from local_coder.settings import PROFILES
+        cpu={'name':PROFILES['_helper']['model'],'size':1024**3,'size_vram':0}
+        with patch('local_coder.gpu_policy.helper_devices',return_value=[1]),\
+             patch('local_coder.ollama._stream_chat',side_effect=stream),\
+             patch('local_coder.ollama.api',return_value={'models':[cpu]}),\
+             patch('local_coder.ollama.unload') as unload:
+            with self.assertRaisesRegex(ollama.InferenceError,'before generation'):
+                ollama.complete([{'role':'user','content':'Check addition'}],{'type':'object'},'_helper')
+        self.assertEqual(len(seen),1)
+        self.assertEqual(seen[0]['messages'],[],'CPU helper generated before the residency check')
+        unload.assert_called_once()
     def test_complete_and_truncated_json_responses(self):
         self.server.release.set()
         result,metrics=self.call();self.assertEqual(result,{'answer':42})
@@ -63,6 +79,6 @@ class InferenceTests(unittest.TestCase):
             answer,metrics=ollama.chat([{'role':'user','content':'Hello'}],False,deadline=time.monotonic()+5,profile='_chat_fast')
         self.assertEqual(self.server.payload['model'],'qwen3.5:4b')
         self.assertEqual(self.server.payload['options']['num_ctx'],8192)
-        self.assertEqual(self.server.payload['options']['num_gpu'],16)
+        self.assertEqual(self.server.payload['options']['num_gpu'],33)
         self.assertEqual(self.server.payload['options']['num_predict'],2048)
         self.assertFalse(self.server.payload['think'])

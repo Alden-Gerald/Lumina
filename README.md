@@ -14,11 +14,23 @@ Existing tests are protected from edits; the agent can add regression tests.
 
 ## Hardware and models
 
-| Profile | Exact Ollama model | Context | RX-only GPU layers | Dual GPU layers |
-| --- | --- | ---: | ---: | ---: |
-| Coding 30B MoE | `qwen3-coder:30b-a3b-q4_K_M` | 32,768 | 15 | 22 |
-| Accuracy 14B | `qwen2.5-coder:14b-instruct-q4_K_M` | 16,384 | 28 | 38 |
-| Balanced 9B (optional download) | `qwen3.5:9b` | 8,192 | 28 | 33 |
+| Role / profile | Exact Ollama model | Context | Assigned GPU layers |
+| --- | --- | ---: | ---: |
+| Default builder 14B | `qwen2.5-coder:14b-instruct-q4_K_M` | 8,192 | RX 6600: 28; remainder CPU |
+| Read-only helper 2B | `qwen3.5:2b-q4_K_M` | 4,096 | GTX 1050 Ti: all 25 |
+| Optional coding 30B MoE | `qwen3-coder:30b-a3b-q4_K_M` | 32,768 | RX 6600: 15; remainder CPU |
+| Balanced 9B (optional download) | `qwen3.5:9b` | 8,192 | RX 6600: 28 |
+
+The 14B builder is now the default. **Parallel assistants** lets one 2B worker
+serve a scout, a test assistant and up to two reviews sequentially while the
+builder works. Helpers receive bounded excerpts and have no file or command
+interfaces. Findings are advisory; only the builder edits. After each patch, CPU
+checks run against an immutable revision in a read-only sandbox. Old results
+cannot approve newer files. The final 14B review and exact-revision checks still
+gate the local commit. Supply a required behavior test for stronger evidence;
+syntax checks alone do not prove that a UI works.
+
+See [the implementation roadmap](docs/parallel-agents-roadmap.md).
 
 The 30B model has approximately 3.3B active parameters per token, but its entire
 quantized weight set must remain accessible. Its download is about 19GB. CPU
@@ -27,10 +39,11 @@ More parameters do not guarantee a better patch; independent behavior checks
 remain necessary. This coding model uses bounded action output rather than an
 unlimited reasoning transcript.
 
-The private inference service uses Vulkan, a quantized Q8 KV cache, one request
-at a time, and a **16 GiB host-memory cap** (14 GiB soft pressure threshold,
-no swap). That budget is an upper limit, not a permanent allocation. The model
-unloads after a task, and after 30 seconds idle. Linux may retain reclaimable
+Both private inference workers use Vulkan, a quantized Q8 KV cache and one
+request per worker. They share a **single 16 GiB systemd slice cap** (14 GiB soft
+pressure threshold, no swap). The helper also has a 4 GiB ceiling. That budget is an upper limit, not a permanent allocation. The model
+unloads after a task; coding requests keep it warm for up to five minutes
+between actions, and chat requests for 30 seconds. Linux may retain reclaimable
 file cache. RAM does not turn an 8GB GPU into a 24GB GPU: model layers and their
 associated cache are distributed between GPU and CPU; transfers and CPU memory
 bandwidth limit speed.
@@ -39,7 +52,8 @@ The agent refuses to start the 30B profile with less than 16 GiB available host
 RAM, or the smaller profiles with less than 8 GiB. Windows currently has an
 8 GiB allocation and a 16 GiB maximum; increasing its allocation may require
 using the 14B profile or stopping inference. Sandboxed commands have a separate
-4 GiB ceiling, not a reserved allocation.
+4 GiB ceiling for interactive tools and a 2 GiB ceiling for background checks,
+not reserved allocations.
 
 The original Ollama service on port 11434 remains separate. If another app has
 a model loaded there, unload it before a task. Local Coder uses port 11435 and
@@ -47,16 +61,17 @@ its own model store. Cloud inference is disabled.
 
 ## GTX 1050 Ti and Windows
 
-Both cards can be considered by the common Vulkan backend when both are visible
-to Linux. This is layer distribution, not a unified 12GB GPU. The slower GTX
-can increase capacity without increasing speed; dual mode requires a real
-benchmark before any speed claim. CPU offload continues in either mode.
+The RX 6600 is exclusively assigned to the builder on port 11435. The GTX,
+when host-visible through nouveau/NVK, runs a separate helper on port 11436.
+Their VRAM is not pooled. Real concurrent inference has been qualified on this
+machine; performance gains depend on the task, and the older GTX has relatively
+slow prompt processing. CPU offload remains on the builder.
 
-The initial setup had the GTX **bound to VFIO at boot**. During the later Chat
-validation both cards were host-visible with nouveau/NVK and real mixed-GPU
-inference completed. Linux cannot use a VFIO-owned card just because Windows is
-shut down. A side-by-side speed comparison and a live Windows handback test are
-still pending. The RX-only path is fully operational.
+A VFIO-owned or manually reserved GTX cannot run the helper, even if Windows
+is shut down. Helpers are skipped while unavailable; they never fall back to
+CPU alongside the offloaded builder. The RX builder and CPU checks continue.
+Physical Windows handback still needs a live VM test; manual reservation has
+been tested without changing PCI bindings.
 An administrator can return the secondary GPU to nouveau/NVK while all VMs are
 off:
 
@@ -74,9 +89,9 @@ session has no passwordless administrator access. Kernel boot configuration
 and VM XML were not changed. Reboot restores the current VFIO boot policy.
 
 The existing `win11-launch` now reserves the GTX for Windows before requesting
-start/resume. A running dual-GPU task is cancelled with its files preserved and
-our inference runner stopped before libvirt can detach the GTX. Existing RX-only
-tasks continue. Subsequent tasks rediscover hardware and use RX + CPU/RAM.
+start/resume. The GTX helper service and its runner stop before libvirt can detach the card.
+The RX builder continues without a restart. Subsequent tasks rediscover whether
+the GTX is available; use `local-coder vm-release` after returning it to the host.
 Use `local-coder vm-reserve` before starting Windows through another application.
 VM shutdown does not itself clear a manual reservation: run `vm-release` when
 Windows is off and the GTX is actually host-visible. Mode changes occur between
@@ -216,7 +231,7 @@ edit project files.
 The default study model is `qwen3:14b` (14.8B,
 Q4_K_M) with a 16,384-token context, 24 RX-only GPU layers (32 verified in dual
 mode), CPU offload, and the same private inference service capped at 16 GiB.
-Study 14B needs at least 12 GiB available host RAM; Quick chat and Coding 14B need 8 GiB, and Coding 30B needs 16 GiB. Quick chat uses the already installed 4B image model in text mode, with an 8k context and the same 16-layer GPU cap. It has no file-editing or terminal
+Study 14B needs at least 12 GiB available host RAM; Quick chat and Coding 14B need 8 GiB, and Coding 30B needs 16 GiB. Quick chat uses the already installed 4B image model in text mode, with an 8k context and all 33 layers on the RX 6600. It has no file-editing or terminal
 tools. Paste lecture notes, ask worked problems, or request practice questions.
 Conversation history is saved locally and complete recent exchanges are retained
 within the context budget. After 50 exchanges, start a new chat.
@@ -299,7 +314,7 @@ bounded task sandbox.
 
 Images are decoded, stripped of metadata, resized to at most 1024px on the
 longest edge, and read sequentially by `qwen3.5:4b` Q4_K_M with an 8k context
-and 16 GPU layers. It unloads before the main model starts. Animated images,
+and 33 GPU layers on the RX 6600. It unloads before the main model starts. Animated images,
 SVG, and files over 12 million pixels are rejected. Document reading does not
 load another GPU model or expand the fixed inference memory/context limits.
 

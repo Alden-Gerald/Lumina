@@ -7,20 +7,20 @@ import time
 import urllib.error
 import urllib.request
 
-from .settings import OLLAMA_URL, PROFILES
+from .settings import OLLAMA_URL, HELPER_URL, PROFILES
 
 HTTP = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 class InferenceError(RuntimeError):
     pass
 
-async def _stream_chat(payload,cancel_event,deadline,progress,allow_thinking=False):
+async def _stream_chat(payload,cancel_event,deadline,progress,allow_thinking=False,base=None):
     import httpx
     pieces=[];final=None;started=time.monotonic();last_progress=0;thinking_characters=0;last_signature=None
     async def reader():
         nonlocal final,thinking_characters
         async with httpx.AsyncClient(trust_env=False,timeout=httpx.Timeout(900,connect=5)) as client:
-            async with client.stream('POST',OLLAMA_URL+'/api/chat',json=payload) as response:
+            async with client.stream('POST',(base or OLLAMA_URL)+'/api/chat',json=payload) as response:
                 response.raise_for_status()
                 async for line in response.aiter_lines():
                     if not line:continue
@@ -98,34 +98,54 @@ def ensure_host_capacity(profile):
         raise InferenceError("Too little available host RAM for this profile. Close memory-heavy apps or use the 14B profile while the VM is running.")
     return {"available_bytes":available,"minimum_available_bytes":required}
 
-def unload(model):
+def unload(model,base=None):
     try:
-        api("/api/generate", {"model": model, "keep_alive": 0}, timeout=15)
+        api("/api/generate", {"model": model, "keep_alive": 0}, timeout=15,base=base or OLLAMA_URL)
     except (OSError, urllib.error.URLError):
         pass
 
 def complete(messages, schema, profile="quality", cancel_event=None, deadline=None,
              token_limit=None, progress=None):
     cfg = PROFILES[profile]
+    helper = profile == '_helper'
+    if helper:
+        from .gpu_policy import helper_devices
+        if not helper_devices():raise InferenceError('GTX reserved or unavailable; helper disabled')
     from .context import estimate
     estimated=estimate(messages,schema,profile)
-    if estimated > cfg["num_ctx"]-2500:
+    if estimated > cfg["num_ctx"]-(1536 if helper else 2500):
         raise InferenceError("Prompt exceeds the safe context budget")
     options = {"num_ctx": cfg["num_ctx"], "num_gpu": cfg["num_gpu"],
                "num_predict": token_limit or cfg["num_predict"], "num_batch": 128,
-               "num_thread": 8, "temperature": 0.15, "presence_penalty": 0,
+               "num_thread": 2 if helper else 8, "temperature": 0.15, "presence_penalty": 0,
                "repeat_penalty": 1.08}
     from .gpu_policy import current
-    if current().get("mode")=="dual-vulkan":
+    if not helper and current().get("mode")=="dual-vulkan":
         options["num_gpu"]=cfg["dual_num_gpu"]
     payload = {"model":cfg["model"],"messages":messages,"format":schema,
-               "stream":True,"think":False,"keep_alive":"30s","options":options}
+               "stream":True,"think":False,"keep_alive":"2m" if helper else "5m","options":options}
     started=time.monotonic()
-    pieces,final=asyncio.run(_stream_chat(payload,cancel_event,deadline,progress))
+    if helper:
+        # Load without generating, then reject CPU fallback before any helper work.
+        warm={**payload,'messages':[]}
+        _,loaded=asyncio.run(_stream_chat(warm,cancel_event,deadline,None,base=HELPER_URL))
+        if not loaded:raise InferenceError('Helper model load did not complete')
+        runners=api('/api/ps',base=HELPER_URL).get('models',[])
+        runner=next((m for m in runners if m['name']==cfg['model']),{})
+        if runner.get('size_vram',0)<.8*runner.get('size',1):
+            unload(cfg['model'],base=HELPER_URL)
+            raise InferenceError('Helper GPU residency failed; CPU fallback rejected before generation')
+    pieces,final=asyncio.run(_stream_chat(payload,cancel_event,deadline,progress,base=HELPER_URL if helper else None))
     if not final: raise InferenceError("Inference ended without a complete response")
     if final.get("done_reason")=="length":
         raise InferenceError("Output limit reached. Nothing was executed; use a smaller action.")
     text="".join(pieces)
+    if helper:
+        loaded=api('/api/ps',base=HELPER_URL).get('models',[])
+        runner=next((m for m in loaded if m['name']==cfg['model']),{})
+        if runner.get('size_vram',0)<.8*runner.get('size',1):
+            unload(cfg['model'],base=HELPER_URL)
+            raise InferenceError('Helper was not sufficiently GPU-resident; CPU fallback rejected')
     # Reject degenerate repetitions before any tool can execute.
     if len(text)>1200 and any(text.count(text[i:i+120])>5 for i in range(0,len(text)-120,120)):
         raise InferenceError("Repeated output rejected. Nothing was executed.")
@@ -133,7 +153,8 @@ def complete(messages, schema, profile="quality", cancel_event=None, deadline=No
     except ValueError as exc: raise InferenceError("Invalid action JSON; nothing was executed") from exc
     return parsed, {"model":cfg["model"],"eval_count":final.get("eval_count",0),
                     "prompt_eval_count":final.get("prompt_eval_count",0),"estimated_input_tokens":estimated,
-                    "seconds":round(time.monotonic()-started,2),"gpu":gpu_usage(),"options":options}
+                    "seconds":round(time.monotonic()-started,2),"gpu":{} if helper else gpu_usage(),"options":options,
+                    "worker":"gtx-helper" if helper else "rx-builder"}
 
 def chat(messages, deep, cancel_event=None, deadline=None, progress=None,profile='_chat'):
     """Text chat has no file/command tools; thinking and output share a fixed token cap."""

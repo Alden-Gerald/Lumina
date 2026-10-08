@@ -25,7 +25,8 @@ def main():
     for name in ["show","diff","cancel","apply"]:
         sub.add_parser(name).add_argument("run_id")
     r=sub.add_parser("run");r.add_argument("task");r.add_argument("--source",default=str(DEFAULT_PROJECT))
-    r.add_argument("--profile",choices=[k for k,v in PROFILES.items() if not v.get('auxiliary')],default="power")
+    r.add_argument("--profile",choices=[k for k,v in PROFILES.items() if not v.get('auxiliary')],default="quality")
+    r.add_argument("--no-team",action="store_true",help="Disable the optional GTX advisory helper")
     r.add_argument("--acceptance",default="");r.add_argument("--check",action="append",default=[])
     r.add_argument("--no-wait",action="store_true")
     m=sub.add_parser("mcp");m.add_argument("--source",default=str(DEFAULT_PROJECT))
@@ -33,8 +34,8 @@ def main():
     args=p.parse_args()
     try:
         if args.command=="gpu-status":
-            from .gpu_policy import inspect
-            print(json.dumps(inspect(),indent=2));return
+            from .gpu_policy import builder_policy
+            print(json.dumps(builder_policy(),indent=2));return
         if args.command in {"vm-reserve","vm-release"}:
             try:result=request("/gpu/"+("reserve" if args.command=="vm-reserve" else "release"),{})
             except OSError:
@@ -57,7 +58,7 @@ def main():
         if args.command=="list":print(json.dumps(request("/runs"),indent=2));return
         if args.command=="run":
             state=request("/runs",{"task":args.task,"source":args.source,"profile":args.profile,
-                "acceptance":args.acceptance,"test_commands":[shlex.split(c) for c in args.check]})
+                "acceptance":args.acceptance,"test_commands":[shlex.split(c) for c in args.check],"team":not args.no_team})
             print("Task:",state["id"])
             if args.no_wait:return
             previous=""

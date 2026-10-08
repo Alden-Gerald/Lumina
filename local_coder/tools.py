@@ -43,8 +43,9 @@ class Tools:
         # Preserve existing tests as independent evidence. New tests may be added.
         self.protected_tests = {p.relative_to(self.root).as_posix() for p in self.root.rglob("*")
             if p.is_file() and any(part.casefold() in {"test", "tests", "__tests__"}
-                or part.casefold().startswith(("test_", "tst_"))
-                or part.casefold().endswith((".test.js", ".spec.js", ".test.ts", ".spec.ts"))
+                or part.casefold().startswith(("test_", "tst_", "test-", "tst-"))
+                or part.casefold().endswith((".test.js", ".spec.js", ".test.ts", ".spec.ts",
+                                           ".test.cjs", ".spec.cjs", ".test.mjs", ".spec.mjs"))
                 for part in p.relative_to(self.root).parts)}
 
     def _path(self, relative: str, *, new=False):

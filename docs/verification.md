@@ -1,3 +1,53 @@
+# Current parallel-worker verification · 2026-10-08
+
+The following results apply to the new separate-worker configuration. Earlier
+single-worker and mixed-GPU measurements below are historical.
+
+| Actual check | Result |
+| --- | --- |
+| Automated tests | 72 passed, including eight parallel-worker tests and a pre-generation GPU-residency guard |
+| Worker assignment | RX 6600 builder; GTX 1050 Ti helper; distinct Ollama ports |
+| Shared inference limit | One slice: MemoryHigh=14GiB, MemoryMax=16GiB, no swap |
+| Real simultaneous 14B + 2B inference | Both completed; six sampling intervals with both models loaded |
+| Short concurrent inference peak | 9.07GiB shared host memory; RX total including desktop 6.26GiB |
+| Helper GPU allocation | 1.45GiB, all 25 model layers offloaded to GTX |
+| Real Quickshell battery-label feature | Completed in five actions, 161.0s to committed result |
+| Independent behavior checks | Ten cases passed: rounding, clamping, charging prefix and invalid inputs |
+| Exact revision gate | Full manifest checked; stale passing results rejected by automated test |
+| Feature-run peak | 10.82GiB sampled shared RAM; 143 samples with both models loaded |
+| Active GTX reservation | Helper disconnected/stopped; RX PID unchanged; active 14B request completed |
+| Quick chat 4B full RX offload | Correct 42 answer, 3.32s, RX usage 4.48GiB including desktop |
+
+The feature task is `2febbcbd91814f48a9efea322949f5d1`, with task commit
+`cf2343ca6391e8a434878b4072d442df5cc25acc`. Only `BatteryLabel.js` changed.
+The QML binding and all supplied tests remained unchanged. The fixture is
+separate from live Quickshell and has not been applied to it.
+
+The scout and test-assistant requests completed alongside the builder. The
+optional helper review was cancelled when the builder finished, while the
+mandatory 14B final review completed. Helpers produce unverified suggestions:
+this run included imprecise helper findings, reinforcing that executable tests
+must remain the acceptance gate. No overall speedup over a single-worker run
+has been measured. The GTX backend decoded about five tokens/second in this
+configuration, so long advisory outputs can be slow.
+
+Private measurements in `~/.local/share/local-coder/`:
+`team-hardware-qualification.json`, `team-feature-qualification.json`,
+`team-active-reservation-qualification.json`, and
+`team-fast-chat-qualification.json`, and `team-helper-load-qualification.json`. The inference slice reported zero OOM
+and OOM-kill events after these tests. Host-memory figures include charged
+file cache. GPU allocation reported by Ollama is not a physical GTX peak
+measurement; RX measurements include the desktop.
+
+Manual reservation was tested during active inference. Starting Windows,
+physical VFIO handback and automatic driver rebinding were not exercised.
+This is a small utility feature with syntax and behavior tests, not proof of
+arbitrary UI correctness or live rendering. Chat/Code admission guards,
+attachments, rating/redo/copy, context compaction and offline sandboxes remain
+covered by the existing tests.
+
+---
+
 # Verification on Gerald's computer
 
 Verified 8 October 2026 on Fedora 44, Ryzen 7 5800X, RX 6600 8GB, 32GB system RAM. GTX 1050 Ti was VFIO-owned for the initial coding benchmarks. Later attachment and Chat tests found both cards host-visible with nouveau/NVK. No dual-GPU speed improvement is claimed.

@@ -14,7 +14,7 @@ def available_ram_gib():
     fields=dict(line.split(':',1) for line in Path('/proc/meminfo').read_text().splitlines())
     return int(fields['MemAvailable'].split()[0])/1024**2
 
-def choose(text,deep,selection='auto',installed=None,ram_gib=None,history_chars=0):
+def choose(text,deep,selection='auto',installed=None,ram_gib=None,history_chars=0,has_documents=False):
     if selection!='auto' and selection not in CHAT_MODELS:raise ValueError('Unknown chat model')
     names=set(installed) if installed is not None else {PROFILES[c['profile']]['model'] for c in CHAT_MODELS.values()}
     ram=available_ram_gib() if ram_gib is None else ram_gib
@@ -25,10 +25,10 @@ def choose(text,deep,selection='auto',installed=None,ram_gib=None,history_chars=
     else:
         coding=bool(re.search(r'\b(code|coding|debug|quickshell|qml|python|typescript|javascript|compiler|refactor)\b',text,re.I))
         simple=len(text)<500 and history_chars<1200 and bool(re.match(r'\s*(hi\b|hello\b|hey\b|thanks\b|thank you\b|translate\b)',text,re.I))
-        preferred=['study','fast'] if deep else ['coding','code14','study','fast'] if coding else ['fast','study'] if simple else ['study','fast']
+        preferred=['study','fast'] if deep or has_documents else ['coding','code14','study','fast'] if coding else ['fast','study'] if simple else ['study','fast']
         chosen=next((k for k in preferred if k in viable),None)
         if chosen is None:raise ValueError('No suitable installed chat model fits the available RAM; close memory-heavy apps')
-        reason=('Deep Thinking requested' if deep else 'Coding question' if coding else 'Short conversation or translation' if simple else 'Study or general question')
+        reason=('Deep Thinking requested' if deep else 'Study documents attached' if has_documents else 'Coding question' if coding else 'Short conversation or translation' if simple else 'Study or general question')
         if chosen!=preferred[0]:reason+='; using an available model within the RAM budget'
     config=CHAT_MODELS[chosen]
     return {'selection':selection,'choice':chosen,'profile':config['profile'],'model':PROFILES[config['profile']]['model'],

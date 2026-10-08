@@ -11,6 +11,7 @@ class ModelSelectionTests(unittest.TestCase):
         self.assertEqual(choose('Debug my Quickshell QML',False,ram_gib=24)['choice'],'coding')
         self.assertEqual(choose('Hello there',False,ram_gib=24)['choice'],'fast')
         self.assertEqual(choose('Explain eigenvalues',False,ram_gib=24)['choice'],'study')
+        self.assertEqual(choose('Hello',False,ram_gib=24,has_documents=True)['choice'],'study')
         self.assertEqual(choose('Hello; continue the problem',False,ram_gib=24,history_chars=2000)['choice'],'study')
 
     def test_memory_and_installed_models_control_fallbacks(self):

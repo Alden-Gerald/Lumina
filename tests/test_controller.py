@@ -91,5 +91,17 @@ class ControllerTests(unittest.TestCase):
             test_commands=[['python3','-c','from calc import add; assert add(3,2)==5']],background=False)
         self.assertEqual(state['status'],'completed',state['message'])
         self.assertEqual(seen[0],'_vision');self.assertEqual(state['visual_observations'][0]['analysis']['visible_text'],['ADD'])
+    def test_document_reference_reaches_plan_without_using_vision(self):
+        self.calls=0;seen=[]
+        def inference(messages,schema,profile,*args):
+            seen.append(profile)
+            if 'objective' in schema['properties']:self.assertIn('Add the two arguments',messages[-1]['content'])
+            return self.fake(messages,schema,profile,*args)
+        m=Manager(self.base/'runs',inference=inference)
+        file=m.image_store.save(b'Feature specification: Add the two arguments rather than subtracting them.','spec.txt')
+        state=m.start('Fix addition according to the attached specification',source=self.source,attachments=[file['id']],
+            test_commands=[['python3','-c','from calc import add; assert add(3,2)==5']],background=False)
+        self.assertEqual(state['status'],'completed',state['message']);self.assertNotIn('_vision',seen)
+        self.assertTrue(state['file_passages'])
 
 if __name__=="__main__":unittest.main()

@@ -254,26 +254,62 @@ CPU core quota. Pinned source version and dependency lock are recorded in
 `local-coder-search.service` starts at user login. Chat and Code are serialized
 at the API boundary so their models never intentionally overlap in memory.
 
-## Image attachments
+## File attachments
 
-Both modes support **Attach images**, pasting a screenshot, and dropping images
-onto the attachment area. In Chat, image previews appear above your text inside
-the same composer. Paste into the text box or use its plus button; there is no
-separate image panel. Up to two PNG, JPEG or WebP images can be attached,
-4 MiB each. Images are decoded, stripped of metadata, resized to at most 1024px
-on their longest edge, and kept privately in the local data directory. Animated
-images, SVG, and files exceeding 12 million pixels are rejected.
+Both modes have **Attach files**. In Chat, previews and file cards appear above
+text inside the same composer. Select multiple files using the plus button, drop
+files onto the composer, or paste an image. Supported files:
 
-A separate `qwen3.5:4b` Q4_K_M local vision model reads each image with an 8k
-context and 16 GPU layers. It unloads before the coding or study model starts.
-The larger text models receive its description and visible text. This keeps
-image processing within the same memory budget; the 30B coding model itself is
-not a vision model. Very small screenshot text may need a tighter crop.
+- PDF with selectable text; Word `.docx`; Excel `.xlsx` and legacy `.xls`.
+- PowerPoint `.pptx`, CSV, UTF-8/UTF-16 TXT, Markdown, JSON, and log files.
+- Still PNG, JPEG, WebP images, through the existing local image reader.
 
-Attachments and conversations remain on disk for task history; clearing the
-composer does not delete an attachment already associated with a saved task.
-Private data lives under `/home/gerald/.local/share/local-coder`, outside this Git
-repository. Do not expose the model, search or dashboard ports to your network.
+Attach up to **four files per message**, including at most **two images**.
+Documents are limited to **10 MiB each**; images to **4 MiB each**. Unsupported
+formats, encrypted documents, malformed archives and unreadable files produce
+an explanation before submission. Old Word `.doc` and PowerPoint `.ppt` need
+exporting to `.docx`/`.pptx`; macro-enabled Office formats are not accepted.
+
+Documents are read on the CPU in a separate Bubblewrap process with no network,
+no GPU, one read-only input file, a 256 MiB virtual-memory limit per process,
+14/15-second CPU soft/hard limits, a 20-second wall deadline and bounded output.
+The dashboard retains its 512 MiB service cap. PDF reading uses the already
+installed Poppler `pdfinfo`/`pdftotext`; Office/text readers use `openpyxl`,
+`xlrd`, `defusedxml` and the standard library. Dependencies are recorded in
+`pyproject.toml`. Nothing executes macros, formulas, links or embedded programs.
+
+Extraction retains at most **200,000 characters**, the first **80 PDF pages**
+or **80 slides**, and the first **10 Excel sheets / 5,000 rows / 64 columns** per
+sheet with a **20,000-cell** total ceiling. Office archives must fit a 32 MiB
+uncompressed limit. The file card shows text readiness and expandable reading
+limits. PDFs without selectable text need screenshots; there is no automatic
+OCR. Word/PDF/slide diagrams, charts, embedded images and slide speaker notes
+are not interpreted by the document reader. Excel formulas appear as text,
+not calculated results.
+
+The tutor selects up to eight relevant passages across attached files using
+local lexical retrieval and the chosen model's token budget. Broad summaries
+sample passages across each file; they are not exhaustive whole-document
+reviews. Auto prefers Study 14B when documents are attached. Follow-up questions
+can retrieve from the four most recently attached documents without uploading
+again. Answers cite labels such as `[F1: Page 2]`; expand **File passages** to
+inspect the exact supplied text. Document reading appears in the activity log.
+Code can use selected passages as reference specifications in its existing
+bounded task sandbox.
+
+Images are decoded, stripped of metadata, resized to at most 1024px on the
+longest edge, and read sequentially by `qwen3.5:4b` Q4_K_M with an 8k context
+and 16 GPU layers. It unloads before the main model starts. Animated images,
+SVG, and files over 12 million pixels are rejected. Document reading does not
+load another GPU model or expand the fixed inference memory/context limits.
+
+Raw files and extracted text remain privately on disk with content hashes.
+Clearing the composer does not delete saved attachments. Document links download
+as data with an attachment disposition; images retain their JPEG previews.
+Private data lives under `/home/gerald/.local/share/local-coder`, outside this
+Git repository. Search query planning does not receive attachment contents;
+only the user's question is used for external queries when search is enabled.
+Do not expose the model, search or dashboard ports to your network.
 
 The Chat/Code separation and SearXNG approach were informed by the
 [Odysseus project](https://github.com/odysseus-dev/odysseus). This implementation

@@ -6,14 +6,14 @@ import json
 from pathlib import Path
 import secrets
 import shlex
-from urllib.parse import urlparse, unquote
+from urllib.parse import urlparse, unquote, quote
 import threading
 
 from .controller import Manager
 from . import ollama
 from .settings import APP_ROOT, DATA_ROOT, PROFILES, DEFAULT_PROJECT
 from .sandbox import Sandbox
-from .images import ImageStore, MAX_UPLOAD_BYTES
+from .attachments import FileStore, MAX_UPLOAD_BYTES, is_image
 from .chat import Chats
 from .model_selection import CHAT_MODELS
 
@@ -21,7 +21,7 @@ class Server(ThreadingHTTPServer):
     daemon_threads=True
     def __init__(self,address):
         self.manager=Manager();self.chats=Chats(DATA_ROOT/'chats');self.activity_lock=threading.RLock();self.token=secrets.token_hex(32)
-        self.images=ImageStore(DATA_ROOT/'attachments');self.upload_slots=threading.BoundedSemaphore(2)
+        self.files=FileStore(DATA_ROOT/'attachments');self.upload_slots=threading.BoundedSemaphore(2)
         DATA_ROOT.mkdir(parents=True,exist_ok=True,mode=0o700)
         token=DATA_ROOT/"server-token";token.write_text(self.token);token.chmod(0o600)
         super().__init__(address,Handler)
@@ -39,12 +39,13 @@ class Handler(BaseHTTPRequestHandler):
         if origin and origin not in {f"http://127.0.0.1:{port}",f"http://localhost:{port}"}:
             raise ValueError("Cross-origin access is disabled")
 
-    def _send(self,status,body,mime="application/json"):
+    def _send(self,status,body,mime="application/json",headers=None):
         data=json.dumps(body,ensure_ascii=False).encode() if mime=="application/json" else body.encode() if isinstance(body,str) else body
         self.send_response(status);self.send_header("Content-Type",mime)
         self.send_header("Content-Length",str(len(data)));self.send_header("Cache-Control","no-store")
         self.send_header("X-Content-Type-Options","nosniff")
         self.send_header("Content-Security-Policy","default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'")
+        for name,value in (headers or {}).items():self.send_header(name,value)
         self.end_headers();self.wfile.write(data)
 
     def do_GET(self):
@@ -78,8 +79,11 @@ class Handler(BaseHTTPRequestHandler):
             if path.startswith('/api/chats/'):return self._send(200,self.server.chats.get(path[len('/api/chats/'):]))
             if path.startswith('/api/attachments/'):
                 image_id=path[len('/api/attachments/'):]
-                self.server.images.load(image_id)
-                return self._send(200,self.server.images.path(image_id).read_bytes(),'image/jpeg')
+                metadata=self.server.files.load(image_id)
+                if is_image(metadata):return self._send(200,self.server.files.path(image_id).read_bytes(),'image/jpeg')
+                # Documents download as data; the browser must not execute their content.
+                return self._send(200,self.server.files.path(image_id).read_bytes(),'application/octet-stream',
+                    {'Content-Disposition':"attachment; filename*=UTF-8''"+quote(metadata['name'],safe='')})
             parts=path.strip("/").split("/")
             if len(parts)>=3 and parts[:2]==["api","runs"]:
                 run_id=parts[2]
@@ -98,11 +102,11 @@ class Handler(BaseHTTPRequestHandler):
             size=int(self.headers.get("Content-Length","0"))
             path=urlparse(self.path).path
             if path=='/api/attachments':
-                if not 0<size<=MAX_UPLOAD_BYTES:raise ValueError('Choose an image under 4MB')
-                if not self.server.upload_slots.acquire(blocking=False):return self._send(429,{'error':'Another image is uploading; try again shortly'})
+                if not 0<size<=MAX_UPLOAD_BYTES:raise ValueError('Choose a file under 10MB; images under 4MB')
+                if not self.server.upload_slots.acquire(blocking=False):return self._send(429,{'error':'Another file is uploading; try again shortly'})
                 try:
                     self.connection.settimeout(15)
-                    return self._send(201,self.server.images.save(self.rfile.read(size),unquote(self.headers.get('X-Upload-Name','Screenshot'))))
+                    return self._send(201,self.server.files.save(self.rfile.read(size),unquote(self.headers.get('X-Upload-Name','Attachment'))))
                 finally:self.server.upload_slots.release()
             if not 0<size<=20000:raise ValueError("Request is empty or too large")
             if self.headers.get_content_type()!="application/json":raise ValueError("JSON required")

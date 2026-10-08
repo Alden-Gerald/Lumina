@@ -47,6 +47,18 @@ class ChatTests(unittest.TestCase):
             self.assertNotIn('thinking_characters',json.dumps(events))
             c.start('Continue',id=s['id'],model='study');self.wait(c)
             self.assertEqual(c.get(s['id'])['messages'][1]['work']['activity'],events)
+    def test_document_passages_reach_tutor_and_remain_available_for_followups(self):
+        with tempfile.TemporaryDirectory() as d:
+            calls=[]
+            def infer(messages,*args):calls.append(messages);return 'The constant is 37.5 volts [F1: Lines 1–1].',{}
+            c=Chats(Path(d)/'chats',infer)
+            file=c.files.save(b'The calibration constant is 37.5 volts.','lecture.txt')
+            s=c.start('Hello, explain this file',deep=False,attachments=[file['id']]);self.wait(c)
+            result=c.get(s['id']);self.assertEqual(result['status'],'idle')
+            self.assertEqual(result['route']['choice'],'study');self.assertIn('37.5',calls[0][-1]['content'])
+            self.assertIn('untrusted data',calls[0][-1]['content']);self.assertTrue(result['messages'][-1]['file_passages'])
+            c.start('What units does that constant use?',id=s['id'],deep=False);self.wait(c)
+            self.assertIn('37.5',calls[-1][-1]['content']);self.assertEqual(c.get(s['id'])['status'],'idle')
     def test_web_sources_are_supplied_and_persisted_without_shell_tools(self):
         with tempfile.TemporaryDirectory() as d:
             seen=[]

@@ -4,7 +4,7 @@ Verified 8 October 2026 on Fedora 44, Ryzen 7 5800X, RX 6600 8GB, 32GB system RA
 
 | Actual check | Result |
 | --- | --- |
-| Agent/sandbox/compiler/API/MCP/inference/chat/image tests | 44 passed |
+| Agent/sandbox/compiler/API/MCP/inference/chat/image tests | 53 passed |
 | 14B, 16k coding benchmark | Completed in four actions; independent behavior checks passed |
 | 30B Q4_K_M, 16k coding benchmark | Completed in four actions; independent behavior checks passed |
 | 30B Q4_K_M, 32k dashboard coding benchmark | Completed in four actions; independent behavior checks passed |
@@ -107,3 +107,33 @@ was released after the reply, and no models remained loaded.
   Auto does not expand VRAM or raise those limits.
 - Visual proofs are local: `chat-working-proof.png` and
   `chat-progress-proof.png` under `/home/gerald/.local/share/local-coder`.
+
+
+## Study files (8 October 2026)
+
+- 53 tests passed, including real isolated PDF/DOCX/XLSX/XLS/PPTX/CSV readers,
+  formula preservation without execution, Word tables, long-file retrieval,
+  summary coverage across files, context budget refusal, extraction caps, XML
+  external-entity and compressed-archive rejection, file/text hash tampering,
+  file downloads, Chat follow-ups, and coding reference files through a checked
+  sandbox task. JavaScript syntax and Git whitespace checks passed.
+- Browser file chooser accepted four files together (PDF, DOCX, XLSX, PPTX).
+  All four showed text-ready file cards above the textarea, within the composer.
+- Conversation `27e44fd0c6af457f8435f876225317bc` selected Study 14B automatically
+  for attached documents and answered in 1m 9sec: “The specified calibration
+  voltage is 37.5 volts [F1: Page 2].” This value was in the second PDF page,
+  not in the user prompt. Six passages from four files were supplied; no vision
+  model was used for document reading.
+- Its follow-up, with no attachments uploaded again, used the manually selected
+  local 4B model and answered in 7s: “The specified resistance is 12 ohms
+  [F3: Sheet Measurements · ending at row 4].” The value was present in the
+  DOCX table and spreadsheet cells. Both replies retained expandable passages.
+- A PDF with no selectable text was rejected at upload with guidance to attach
+  a screenshot, without creating a ready attachment or starting model inference.
+  Clipboard PNG paste was rechecked successfully after that failure.
+- Readers run on CPU inside a networkless Bubblewrap namespace, 256 MiB virtual
+  memory per process, CPU/time/output ceilings. Existing inference GPU/context
+  profiles and the private service's 16 GiB RAM maximum remain fixed.
+- Local browser proof: `/home/gerald/.local/share/local-coder/attach-files-proof.png`.
+  Answer proof: `file-study-answer-proof.png` in the same directory. Test documents
+  contain generated, non-personal lecture and measurement data.

@@ -1,0 +1,9 @@
+#!/bin/sh
+set -eu
+
+rule='rule family="ipv4" source address="192.168.18.0/24" port protocol="tcp" port="8443" accept'
+if ! firewall-cmd --permanent --zone=public --query-rich-rule="$rule" >/dev/null; then
+    firewall-cmd --permanent --zone=public --add-rich-rule="$rule"
+fi
+firewall-cmd --reload
+firewall-cmd --zone=public --query-rich-rule="$rule"

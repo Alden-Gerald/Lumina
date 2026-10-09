@@ -1,0 +1,14 @@
+[Unit]
+Description=Publish lumina.local on the home network
+
+[Service]
+ExecStart=/usr/bin/python3 /home/gerald/local-coder/scripts/publish-lumina.py 192.168.18.5
+WorkingDirectory=/home/gerald/local-coder
+Restart=always
+RestartSec=3
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+
+[Install]
+WantedBy=default.target

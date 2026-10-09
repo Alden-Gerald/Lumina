@@ -1,27 +1,329 @@
-<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Local Coder</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/assets/katex/katex.min.css"><script src="/assets/katex/katex.min.js" defer></script><script src="/assets/katex/contrib/auto-render.min.js" defer></script><script src="/time-format.js" defer></script><script src="/response-actions.js" defer></script><script src="/app.js" defer></script></head>
-<body><script id="session" type="application/json">{"token":"__TOKEN__"}</script>
-<div class="layout"><aside><div class="brand"><span class="logo">⌘</span><div>Local Coder<small>Study & build, locally</small></div></div>
-<button id="new-task" class="secondary wide">＋ New task</button><h2>Recent work</h2><nav id="runs"></nav>
-<div class="hardware"><span class="dot"></span> Runs entirely on this computer<p id="hardware-mode">RX 6600 · 14B builder<br>GTX 1050 Ti · optional 2B helper<br>16GiB shared inference RAM limit</p></div></aside>
-<main><div class="mode-switch" role="group" aria-label="Workspace mode"><button id="mode-chat" class="secondary" aria-pressed="false">Chat</button><button id="mode-code" class="secondary" aria-pressed="true">Code</button></div><header><div><span class="eyebrow">ORBIT QUICKSHELL</span><h1 id="heading">Build one useful feature.</h1></div><span id="connection" class="pill">Connecting</span></header>
-<section id="chat-space" hidden>
-<div class="card chat-intro" id="chat-intro"><h2>Your study companion</h2><p>Understand a difficult concept, work through a problem, or turn lecture notes into practice questions.</p><p class="note" id="chat-model-note">Auto chooses a local model for your question.</p></div>
-<p id="chat-lineage" class="note" hidden></p><div id="chat-messages" aria-live="polite"></div><div id="chat-partial" aria-live="polite"></div>
-<section id="chat-activity" class="chat-activity" hidden aria-label="Reply progress"><div class="activity-header"><span id="chat-state" class="state-badge">Working</span><span id="chat-model-used"></span><span id="chat-duration">0s</span></div><div id="chat-live" class="live-message"><span id="chat-live-text" role="status">Preparing your reply</span><span class="writing-dots" aria-hidden="true">● ● ●</span></div><ul id="chat-machine-log" class="machine-log" aria-label="Machine activity"></ul><details id="chat-log"><summary id="chat-work-summary">Activity log · Working for 0s</summary><ol id="chat-log-entries" class="activity-log"></ol></details></section>
-<div class="card" id="chat-composer"><label for="chat-input">What would you like to understand?</label>
-<div id="chat-message-box" class="message-composer"><div id="chat-file-slot"></div><textarea id="chat-input" rows="4" placeholder="Ask a question, paste notes, or attach study files…"></textarea><div class="composer-toolbar"><button id="chat-attach" class="secondary" type="button" aria-label="Attach files" title="Attach files">＋ Attach files</button><span id="chat-upload-status" role="status"></span><span class="file-limit">PDF, Word, Excel, slides, text, images · 4 files · 10MB each*</span></div></div>
-<div class="chat-actions"><div class="chat-model-field"><label for="chat-model">AI model</label><select id="chat-model"><option value="auto" selected>Auto · Choose for me</option></select></div><label class="toggle deep-toggle"><span><input id="chat-deep" type="checkbox" checked> Deep Thinking</span><small id="deep-note">Takes longer to process; difficult questions can take several minutes.</small></label><label class="toggle"><input id="chat-web" type="checkbox"> Google web search</label><button id="chat-send" class="primary">Send →</button><button id="chat-stop" class="secondary" hidden>Stop reply</button></div>
-<p class="note">Search is optional, with clearly labeled fallbacks when Google is unavailable. Search queries go online; attached files and answers are processed locally. *Images: 4MB each, at most 2. Code and Chat take turns using the model.</p></div></section><section id="composer" class="card"><label for="task">What should your shell do?</label>
-<textarea id="task" rows="5" placeholder="For example: add a compact battery indicator to the bottom bar. Reuse the existing power service, show a charging icon, and keep the current bar layout."></textarea>
-<div id="file-drop" class="file-drop"><button id="attach-file" type="button" class="secondary">＋ Attach files</button><input id="file-input" type="file" accept="image/png,image/jpeg,image/webp,.pdf,.docx,.xlsx,.xls,.pptx,.csv,.txt,.md,.json,.log" multiple hidden><span id="file-status">Paste an image or drop files here.</span><div id="attachments" class="attachments"></div><p class="note">Up to 4 files: PDF, DOCX, XLSX/XLS, PPTX, CSV, text and images. Documents: 10MB each; up to 2 images, 4MB each. Read locally before the coding model starts.</p></div>
-<label for="acceptance">How will you know it works? <span>Optional</span></label><textarea id="acceptance" rows="2" placeholder="Describe the behavior and edge cases that matter to you."></textarea>
-<div class="form-row"><div><label for="profile">Model</label><select id="profile"><option value="quality" selected>Builder · 14B · 8k context</option><option value="power">Coding · 30B MoE · 32k context</option><option value="balanced">Balanced · 9B · 8k context</option></select></div><button id="start" class="primary">Plan and build →</button></div>
-<label class="toggle"><input id="team" type="checkbox" checked> Parallel assistants</label><p id="team-note" class="note">With the 14B builder, a read-only 2B helper uses the GTX when available. Real checks run alongside edits on the CPU. Shared inference memory limit: 16GiB.</p>
-<details class="advanced"><summary>Project and checks</summary><label for="source">Project folder</label><input id="source" value="/home/gerald/dotfiles/quickshell"><label for="check">Required check command <span>Optional</span></label><input id="check" placeholder="For example: node --test tests/window-title.test.js"><p>Commands run offline in the task sandbox. Source files are edited through precise patches.</p></details>
-<p class="note">Each task starts from your current files, builds in a separate workspace, and creates a checked local commit. You choose when to apply the result.</p></section>
-<section id="work" hidden><div class="card progress"><div><span id="status" class="pill">Preparing</span><h2 id="message">Preparing your task</h2><p id="task-title"></p><div id="task-attachments" class="attachments"></div></div><button id="cancel" class="secondary">Stop task</button></div>
-<section id="team-status" class="card team-status" hidden aria-label="Parallel worker status" aria-live="polite"></section>
-<div class="work-grid"><section class="card"><h2>Plan</h2><ol id="plan"></ol><h2>Progress</h2><div id="events" class="events"></div></section><section class="card"><h2>Result</h2><div id="result">The implementation will appear here.</div><div id="checks"></div><div id="apply-box" hidden><button id="apply" class="primary wide">Apply checked changes</button><p class="note">Source files must still match the starting snapshot. A backup is kept. Reload Quickshell when ready.</p></div><h2>Changes</h2><pre id="diff" class="diff">No edits yet.</pre></section></div></section>
-<div id="error" class="error" hidden></div><footer>Local answers · Optional search · Isolated coding · Checked commits</footer></main></div></body></html>
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Lumina</title>
+    <link rel="stylesheet" href="/style.css">
+    <link rel="stylesheet" href="/theme.css">
+    <link rel="stylesheet" href="/settings.css">
+    <link rel="stylesheet" href="/assets/katex/katex.min.css">
+    <script src="/assets/katex/katex.min.js" defer></script>
+    <script src="/assets/katex/contrib/auto-render.min.js" defer></script>
+    <script src="/time-format.js" defer></script>
+    <script src="/response-actions.js" defer></script>
+    <script src="/app.js" defer></script>
+    <script src="/theme-picker.js" defer></script>
+    <script src="/settings.js" defer></script>
+  </head>
+  <body>
+    <script id="session" type="application/json">{"token":"__TOKEN__"}</script>
+    <div class="layout" id="layout">
+      <aside id="sidebar" aria-label="Lumina navigation">
+        <div class="sidebar-brand-row">
+          <div class="brand">
+            <span class="logo">✦</span>
+            <div class="brand-text">
+              Lumina
+              <small>Your local creative workspace</small>
+            </div>
+          </div>
+          <button id="sidebar-toggle" class="sidebar-toggle" type="button" aria-label="Minimize sidebar" aria-expanded="true" aria-controls="sidebar" title="Minimize sidebar">«</button>
+        </div>
+        <button id="new-task" class="secondary wide" title="New task">
+          <span class="new-task-icon" aria-hidden="true">＋</span>
+          <span id="new-task-label">New task</span>
+        </button>
+        <h2>Recent work</h2>
+        <input id="history-search" class="history-search" type="search" placeholder="Search recent work" aria-label="Search recent work">
+        <nav id="runs"></nav>
+        <button id="settings-open" class="settings-launch" type="button" aria-haspopup="dialog" aria-controls="settings-dialog" title="Settings">
+          <span class="settings-launch-icon" aria-hidden="true">⚙</span><span class="settings-launch-label">Settings</span>
+        </button>
+        <div class="hardware">
+          <span class="dot"></span> Runs entirely on this computer
+          <p id="hardware-mode">RX 6600 · 14B builder<br>GTX 1050 Ti · optional 2B helper<br>16GiB shared inference RAM limit</p>
+          <button id="helper-check" class="secondary helper-check" type="button">Check GTX helper</button>
+          <small id="helper-check-status" role="status" aria-live="polite"></small>
+        </div>
+      </aside>
+      <div id="sidebar-resizer" class="sidebar-resizer" role="separator" tabindex="0" aria-label="Resize sidebar" aria-orientation="vertical" aria-valuemin="190" aria-valuemax="420" aria-valuenow="248" title="Drag to resize sidebar; use arrow keys for fine adjustment"></div>
+      <main>
+        <div class="topbar">
+          <div class="mode-switch" role="group" aria-label="Workspace mode">
+            <button id="mode-chat" class="secondary" aria-pressed="false">✦ Chat</button>
+            <button id="mode-code" class="secondary" aria-pressed="true">⌘ Code</button>
+            <button id="mode-neural-networks" class="secondary" aria-pressed="false">🧠 Neural Networks</button>
+          </div>
+          <div class="topbar-actions">
+            <span id="connection" class="pill">Connecting</span>
+            <button id="context-sidebar-toggle" class="secondary" type="button" aria-expanded="false" aria-controls="context-sidebar">Theme, outputs &amp; sources</button>
+          </div>
+        </div>
+        <header>
+          <div>
+            <span class="eyebrow">LOCAL WORKSPACE</span>
+            <h1 id="heading">Build one useful feature.</h1>
+          </div>
+        </header>
+        <section id="chat-space" hidden>
+          <div id="chat-layout" class="chat-layout">
+            <div class="chat-column">
+              <div class="card chat-intro" id="chat-intro">
+                <h2>Make room for ideas.</h2>
+                <p>Ask a question, explore a concept, or describe a website or tool to see it come to life beside the chat.</p>
+                <p class="note" id="chat-model-note">Auto chooses a local model for your question.</p>
+              </div>
+              <p id="chat-lineage" class="note" hidden></p>
+              <div id="chat-messages" aria-live="polite"></div>
+              <div id="chat-partial" aria-live="polite"></div>
+              <section id="chat-activity" class="chat-activity" hidden aria-label="Reply progress">
+                <div class="activity-header">
+                  <span id="chat-state" class="state-badge">Working</span>
+                  <span id="chat-model-used"></span>
+                  <span id="chat-duration">0s</span>
+                </div>
+                <div id="chat-live" class="live-message">
+                  <span id="chat-live-text" role="status">Preparing your reply</span>
+                  <span class="writing-dots" aria-hidden="true">● ● ●</span>
+                </div>
+                <ul id="chat-machine-log" class="machine-log" aria-label="Machine activity"></ul>
+                <details id="chat-log">
+                  <summary id="chat-work-summary">Activity log · Working for 0s</summary>
+                  <ol id="chat-log-entries" class="activity-log"></ol>
+                </details>
+              </section>
+              <div class="card" id="chat-composer">
+                <div class="composer-heading">
+                  <label for="chat-input">Message Lumina</label>
+                  <div id="chat-context-usage" class="chat-context-usage" aria-label="Conversation context" title="Token use appears after the first reply">
+                    <span id="chat-tokens-used">Tokens —</span>
+                    <span class="context-separator" aria-hidden="true">·</span>
+                    <span id="chat-context-left">Context left —</span>
+                  </div>
+                </div>
+                <div id="chat-message-box" class="message-composer">
+                  <div id="chat-file-slot"></div>
+                  <textarea id="chat-input" rows="4" placeholder="Ask anything, or describe something to build…"></textarea>
+                  <div class="composer-toolbar">
+                    <button id="chat-attach" class="secondary" type="button" aria-label="Attach files" title="Attach files">＋ Attach files</button>
+                    <span id="chat-upload-status" role="status"></span>
+                    <span class="file-limit">4 files max · Images 4 MB</span>
+                  </div>
+                </div>
+                <div class="chat-actions">
+                  <div class="chat-model-field">
+                    <label for="chat-model">AI model</label>
+                    <select id="chat-model">
+                      <option value="auto" selected>Auto · Choose for me</option>
+                    </select>
+                  </div>
+                  <div class="chat-option-group">
+                    <label class="toggle">
+                      <input id="chat-deep" type="checkbox" aria-describedby="deep-note" checked> Structured answer
+                    </label>
+                    <label class="toggle">
+                      <input id="chat-web" type="checkbox"> Google web search
+                    </label>
+                  </div>
+                  <div class="chat-submit">
+                    <button id="chat-send" class="primary">Send →</button>
+                    <button id="chat-stop" class="secondary" hidden>Stop reply</button>
+                  </div>
+                </div>
+                <div class="composer-meta">
+                  <span id="deep-note">Complex questions are divided into smaller questions, solved locally, then combined into one answer.</span>
+                  <details class="composer-details">
+                    <summary>File limits &amp; privacy</summary>
+                    <p>Attach up to 4 files: PDF, Word, Excel, slides, text, or images. Documents: 10 MB each; up to 2 images, 4 MB each. Files and answers stay local. Optional web search sends queries online. Code and Chat share the local model.</p>
+                  </details>
+                </div>
+              </div>
+            </div>
+            <aside id="artifact-panel" class="artifact-panel" hidden aria-label="Interactive artifact">
+              <div class="artifact-header">
+                <div>
+                  <span class="artifact-kicker">INTERACTIVE PREVIEW</span>
+                  <h2 id="artifact-title">Untitled artifact</h2>
+                </div>
+                <button id="artifact-close" class="artifact-icon" type="button" aria-label="Close preview" title="Close preview">×</button>
+              </div>
+              <div class="artifact-toolbar">
+                <div class="artifact-tabs" role="tablist" aria-label="Artifact view">
+                  <button id="artifact-preview-tab" type="button" role="tab" aria-selected="true">Preview</button>
+                  <button id="artifact-code-tab" type="button" role="tab" aria-selected="false">Code</button>
+                </div>
+                <button id="artifact-copy" class="secondary" type="button">Copy code</button>
+              </div>
+              <div class="artifact-canvas">
+                <iframe id="artifact-frame" title="Interactive artifact preview" sandbox="allow-scripts" referrerpolicy="no-referrer"></iframe>
+                <pre id="artifact-source" hidden></pre>
+              </div>
+              <div class="artifact-footer">
+                <span id="artifact-version">Version 1</span>
+                <span>Runs in an isolated frame</span>
+              </div>
+            </aside>
+          </div>
+        </section>
+        <section id="neural-space" class="neural-space" hidden aria-labelledby="neural-title">
+          <div class="card neural-intro">
+            <span class="eyebrow">MODEL EXPLORER</span>
+            <h2 id="neural-title">How Lumina's neural networks process a request</h2>
+            <p>These are simplified architecture diagrams built from Lumina's configured model metadata. They do not show live activations, hidden reasoning, or undocumented layer and expert counts.</p>
+            <label for="neural-model">Model</label>
+            <select id="neural-model" aria-describedby="neural-status"></select>
+            <p id="neural-status" class="note" role="status"></p>
+          </div>
+          <div class="card neural-detail">
+            <div class="neural-heading">
+              <div><span id="neural-availability" class="pill"></span><h2 id="neural-model-name"></h2></div>
+              <p id="neural-roles" class="note"></p>
+            </div>
+            <div id="neural-diagram" class="neural-diagram" role="img" aria-labelledby="neural-model-name neural-diagram-description"></div>
+            <p id="neural-diagram-description" class="neural-description"></p>
+            <ol id="neural-steps" class="neural-steps" aria-label="Text equivalent of the neural network diagram"></ol>
+            <div class="neural-note">
+              <h3>Inference is not training</h3>
+              <p>Lumina sends your current prompt and selected context through pretrained weights to predict output tokens. Saved chats, memories, document retrieval, and feedback can change the context supplied to a request, but they do not automatically change those weights.</p>
+            </div>
+          </div>
+        </section>
+        <section id="composer" class="card">
+          <label for="task">What should your shell do?</label>
+          <textarea id="task" rows="5" placeholder="For example: add a compact battery indicator to the bottom bar. Reuse the existing power service, show a charging icon, and keep the current bar layout."></textarea>
+          <div id="file-drop" class="file-drop">
+            <button id="attach-file" type="button" class="secondary">＋ Attach files</button>
+            <input id="file-input" type="file" accept="image/png,image/jpeg,image/webp,.pdf,.docx,.xlsx,.xls,.pptx,.csv,.txt,.md,.json,.log" multiple hidden>
+            <span id="file-status">Paste an image or drop files here.</span>
+            <div id="attachments" class="attachments"></div>
+            <p class="note">Up to 4 files: PDF, DOCX, XLSX/XLS, PPTX, CSV, text and images. Documents: 10MB each; up to 2 images, 4MB each. Read locally before the coding model starts.</p>
+          </div>
+          <label for="acceptance">How will you know it works? <span>Optional</span></label>
+          <textarea id="acceptance" rows="2" placeholder="Describe the behavior and edge cases that matter to you."></textarea>
+          <div class="form-row">
+            <div>
+              <label for="profile">Model</label>
+              <select id="profile">
+                <option value="roadmap" selected>Automatic roadmap · 7B · 8k context</option>
+                <option value="quality">Builder · 14B · 8k context</option>
+                <option value="power">Coding · 30B MoE · 32k context</option>
+                <option value="balanced">Balanced · 9B · 8k context</option>
+              </select>
+            </div>
+            <button id="start" class="primary">Plan and build →</button>
+          </div>
+          <label class="toggle">
+            <input id="team" type="checkbox" checked> Parallel assistants
+          </label>
+          <p id="team-note" class="note">The automatic 7B builder uses small actions, deterministic checks, bounded recovery, and a read-only GTX helper when available.</p>
+          <details class="advanced">
+            <summary>Project and checks</summary>
+            <label for="source">Project folder</label>
+            <input id="source" value="/home/gerald/dotfiles/quickshell">
+            <label for="check">Required check command <span>Optional</span></label>
+            <input id="check" placeholder="For example: node --test tests/window-title.test.js">
+            <p>Commands run offline in the task sandbox. Source files are edited through precise patches.</p>
+          </details>
+          <p class="note">Each task starts from your current files, builds in a separate workspace, and creates a checked local commit. You choose when to apply the result.</p>
+        </section>
+        <section id="work" hidden>
+          <div class="card progress">
+            <div>
+              <span id="status" class="pill">Preparing</span>
+              <h2 id="message">Preparing your task</h2>
+              <p id="task-title"></p>
+              <div id="task-attachments" class="attachments"></div>
+            </div>
+            <div class="progress-actions">
+              <button id="continue-once" class="primary" type="button" hidden>Continue once</button>
+              <button id="continue-instructions" class="secondary" type="button" hidden>Continue with instructions</button>
+              <button id="follow-up" class="secondary" type="button" hidden>Create follow-up</button>
+              <button id="auto-solve" class="primary" type="button" hidden>Auto solve</button>
+              <button id="cancel" class="secondary" type="button">Stop task</button>
+            </div>
+          </div>
+          <section id="team-status" class="card team-status" hidden aria-label="Parallel worker status" aria-live="polite"></section>
+          <div class="work-grid">
+            <section class="card">
+              <h2>Plan</h2>
+              <ol id="plan"></ol>
+              <h2>Progress</h2>
+              <div id="events" class="events"></div>
+            </section>
+            <section class="card">
+              <h2>Result</h2>
+              <div id="result">The implementation will appear here.</div>
+              <div id="checks"></div>
+              <div id="apply-box" hidden>
+                <button id="apply" class="primary wide">Apply checked changes</button>
+                <p class="note">Source files must still match the starting snapshot. A backup is kept. Reload Quickshell when ready.</p>
+              </div>
+              <h2>Changes</h2>
+              <pre id="diff" class="diff">No edits yet.</pre>
+            </section>
+          </div>
+        </section>
+        <div id="error" class="error" hidden></div>
+        <footer>Local answers · Optional search · Isolated coding · Checked commits</footer>
+      </main>
+      <aside id="context-sidebar" class="context-sidebar" aria-label="Theme, outputs and sources" hidden>
+        <div class="context-sidebar-head">
+          <div><span class="logo" aria-hidden="true">✦</span><strong>Workspace details</strong></div>
+          <button id="context-sidebar-close" type="button" aria-label="Close details panel">×</button>
+        </div>
+        <section><h2>Theme</h2><p id="context-theme">Current Lumina theme</p><button id="context-theme-open" class="secondary wide" type="button">Choose theme</button></section>
+        <section><h2>Outputs</h2><ul id="context-outputs" class="context-list"></ul></section>
+        <section><h2>Sources</h2><ul id="context-sources" class="context-list"></ul></section>
+      </aside>
+    </div>
+    <dialog id="settings-dialog" class="settings-dialog" aria-labelledby="settings-title">
+      <div class="settings-shell">
+        <aside class="settings-sidebar" aria-label="Settings sections">
+          <div class="settings-sidebar-head">
+            <strong id="settings-title">Settings</strong>
+            <button id="settings-close-mobile" class="settings-icon-button" type="button" aria-label="Close settings">×</button>
+          </div>
+          <label class="settings-search-label" for="settings-search">Search settings</label>
+          <input id="settings-search" type="search" placeholder="Search settings" autocomplete="off">
+          <nav id="settings-nav" aria-label="Settings navigation"></nav>
+        </aside>
+        <div class="settings-content">
+          <div class="settings-content-head">
+            <div><span class="settings-kicker">LUMINA</span><h2 id="settings-section-title">General</h2></div>
+            <button id="settings-close" class="settings-icon-button" type="button" aria-label="Close settings">×</button>
+          </div>
+          <div id="settings-section-body" class="settings-section-body"></div>
+        </div>
+      </div>
+    </dialog>
+    <div class="theme-dock" id="theme-dock">
+      <button id="theme-picker-toggle" class="theme-picker-toggle" type="button" aria-expanded="false" aria-controls="theme-picker-panel" aria-label="Open theme picker">
+        <span aria-hidden="true">◐</span>
+        <span>Theme</span>
+        <span id="theme-current-dot" class="theme-current-dot" aria-hidden="true"></span>
+      </button>
+      <section class="theme-picker-panel" id="theme-picker-panel" aria-label="Theme picker" hidden>
+        <div class="theme-picker-header">
+          <div>
+            <strong>Theme picker</strong>
+            <small>Choose how Lumina looks</small>
+          </div>
+          <button id="theme-picker-close" type="button" aria-label="Close theme picker">×</button>
+        </div>
+        <button id="theme-follow" class="theme-follow" type="button" aria-pressed="true">
+          <span class="theme-follow-icon" aria-hidden="true">↻</span>
+          <span>
+            <strong>Follow Quickshell</strong>
+            <small id="theme-shell-name">Reading current theme…</small>
+          </span>
+          <span class="theme-check" aria-hidden="true">✓</span>
+        </button>
+        <label for="theme-search">Themes</label>
+        <input id="theme-search" type="search" placeholder="Search themes…" autocomplete="off">
+        <div id="theme-options" class="theme-options" role="group" aria-label="Lumina themes"></div>
+        <p id="theme-picker-status" class="theme-picker-status" role="status"></p>
+      </section>
+    </div>
+  </body>
+</html>

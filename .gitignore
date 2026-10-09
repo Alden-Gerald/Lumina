@@ -1,6 +1,8 @@
 .venv/
+node_modules/
 __pycache__/
 *.pyc
 .pytest_cache/
 dist/
 *.egg-info/
+integrations/openclaw-wayland/wayland-input

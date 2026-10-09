@@ -26,3 +26,18 @@ class MCPTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             p=Path(d);(p/"example.py").write_text("answer = 41\n")
             asyncio.run(check(p))
+
+    def test_handoff_stdio_advertises_only_orchestration_tools(self):
+        async def check(source):
+            params=StdioServerParameters(command=sys.executable,
+                args=["-m","local_coder.cli","handoff-mcp","--source",str(source)])
+            async with Client(params) as client:
+                listing=await client.list_tools()
+                self.assertEqual({t.name for t in listing.tools},{
+                    "handoff_to_local_ai","get_handoff_status","get_handoff_diff","cancel_handoff"})
+                handoff=next(t for t in listing.tools if t.name=="handoff_to_local_ai")
+                self.assertIn("attachment_paths",handoff.input_schema["properties"])
+                self.assertIn("source_path",handoff.input_schema["properties"])
+                self.assertIn("auto_apply",handoff.input_schema["properties"])
+        with tempfile.TemporaryDirectory() as d:
+            asyncio.run(check(Path(d)))

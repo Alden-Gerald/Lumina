@@ -3,7 +3,7 @@ from pathlib import Path
 import tempfile
 import threading
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, call
 import urllib.request
 import urllib.error
 from local_coder.server import Server
@@ -11,6 +11,39 @@ from PIL import Image
 import io
 
 class ServerTests(unittest.TestCase):
+    def test_continue_endpoint_resumes_needs_attention_run(self):
+        run_id='a'*32
+        with tempfile.TemporaryDirectory() as d,patch('local_coder.server.DATA_ROOT',Path(d)),patch('local_coder.server.Manager') as manager:
+            manager.return_value.resume.return_value={'id':run_id,'status':'queued'}
+            server=Server(('127.0.0.1',0));server.chats.worker=None
+            thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
+            base=f'http://127.0.0.1:{server.server_address[1]}';opener=urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            try:
+                req=urllib.request.Request(base+'/api/runs/'+run_id+'/continue',b'{}',{
+                    'Content-Type':'application/json','X-Local-Coder-Token':server.token})
+                with opener.open(req,timeout=3) as response:
+                    self.assertEqual(response.status,202);self.assertEqual(json.load(response)['status'],'queued')
+                auto=urllib.request.Request(base+'/api/runs/'+run_id+'/auto-solve',b'{}',{
+                    'Content-Type':'application/json','X-Local-Coder-Token':server.token})
+                with opener.open(auto,timeout=3) as response:self.assertEqual(response.status,202)
+                self.assertEqual(manager.return_value.resume.call_args_list,[call(run_id),call(run_id,auto=True)])
+            finally:server.shutdown();server.server_close();thread.join()
+
+    def test_helper_check_uses_guarded_gpu_probe(self):
+        ready={'available':True,'indices':[1],'model':'helper-model'}
+        hardware={'helper_indices':[1],'dual_available':False}
+        with tempfile.TemporaryDirectory() as d,patch('local_coder.server.DATA_ROOT',Path(d)),\
+                patch('local_coder.server.Manager'),patch('local_coder.gpu_policy.prepare_helper',return_value=ready) as prepare,\
+                patch('local_coder.gpu_policy.builder_policy',return_value=hardware):
+            server=Server(('127.0.0.1',0));thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
+            base=f'http://127.0.0.1:{server.server_address[1]}';opener=urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            try:
+                req=urllib.request.Request(base+'/api/gpu/helper/check',b'{}',{'Content-Type':'application/json','X-Local-Coder-Token':server.token})
+                with opener.open(req,timeout=3) as response:
+                    result=json.load(response);self.assertTrue(result['available']);self.assertEqual(result['hardware'],hardware)
+                prepare.assert_called_once_with()
+            finally:server.shutdown();server.server_close();thread.join()
+
     def test_response_downloads_contain_exact_answer_and_feedback_context(self):
         with tempfile.TemporaryDirectory() as d,patch('local_coder.server.DATA_ROOT',Path(d)),patch('local_coder.server.Manager'):
             server=Server(('127.0.0.1',0));server.chats.inference=lambda *_:('Voltage is measured in volts.',{})
@@ -42,6 +75,11 @@ class ServerTests(unittest.TestCase):
                 manager.return_value.worker.is_alive.return_value=True
                 with self.assertRaises(urllib.error.HTTPError) as e:post('/api/chats',{'text':'Study question'})
                 self.assertEqual(e.exception.code,400);e.exception.close();chats.return_value.start.assert_not_called()
+                queued=urllib.request.Request(base+'/api/chats',json.dumps({'text':'Queued study question'}).encode(),{
+                    'Content-Type':'application/json','X-Local-Coder-Token':server.token,'X-Lumina-Queue':'true'})
+                with opener.open(queued,timeout=3) as response:
+                    item=json.load(response);self.assertEqual(response.status,202);self.assertTrue(item['queued']);self.assertEqual(item['kind'],'chat')
+                server.queue.cancel(item['id'])
                 with self.assertRaises(urllib.error.HTTPError) as e:post('/api/chats/'+'a'*32+'/redo',{'message_id':'b'*32})
                 self.assertEqual(e.exception.code,400);e.exception.close();chats.return_value.branch.assert_not_called()
                 manager.return_value.worker=None;chats.return_value.worker.is_alive.return_value=True

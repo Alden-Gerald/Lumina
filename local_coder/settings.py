@@ -6,6 +6,11 @@ RUNS_ROOT = DATA_ROOT / "runs"
 TOOLCHAIN = DATA_ROOT / "toolchain"
 OLLAMA_URL = "http://127.0.0.1:11435"
 PROFILES = {
+    "_chat_fast": {
+        "label": "Quick chat · 4B", "model": "qwen3.5:4b",
+        "num_ctx": 8192, "num_gpu": 16, "dual_num_gpu": 16,
+        "num_predict": 4096, "auxiliary": True,
+    },
     "_chat": {
         "label": "Study & reasoning · 14B", "model": "qwen3:14b",
         "num_ctx": 16384, "num_gpu": 24, "dual_num_gpu": 32,

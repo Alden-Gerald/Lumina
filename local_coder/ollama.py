@@ -16,7 +16,7 @@ class InferenceError(RuntimeError):
 
 async def _stream_chat(payload,cancel_event,deadline,progress,allow_thinking=False):
     import httpx
-    pieces=[];final=None;started=time.monotonic();last_progress=0;thinking_characters=0
+    pieces=[];final=None;started=time.monotonic();last_progress=0;thinking_characters=0;last_signature=None
     async def reader():
         nonlocal final,thinking_characters
         async with httpx.AsyncClient(trust_env=False,timeout=httpx.Timeout(900,connect=5)) as client:
@@ -42,11 +42,13 @@ async def _stream_chat(payload,cancel_event,deadline,progress,allow_thinking=Fal
             now=time.monotonic()
             if (deadline and now>=deadline) or now-started>=900:
                 raise InferenceError('Task time budget exhausted')
-            if progress and now-last_progress>=5:
+            signature=(sum(map(len,pieces)),bool(thinking_characters))
+            interval=.25 if allow_thinking and signature!=last_signature else 5
+            if progress and now-last_progress>=interval:
                 details={'generated_characters':sum(map(len,pieces)),'elapsed_seconds':round(now-started)}
                 if allow_thinking:details.update(answer=''.join(pieces),thinking_characters=thinking_characters)
                 progress(details)
-                last_progress=now
+                last_progress=now;last_signature=signature
             done,_=await asyncio.wait({task},timeout=.25)
             if done:
                 await task
@@ -133,11 +135,11 @@ def complete(messages, schema, profile="quality", cancel_event=None, deadline=No
                     "prompt_eval_count":final.get("prompt_eval_count",0),"estimated_input_tokens":estimated,
                     "seconds":round(time.monotonic()-started,2),"gpu":gpu_usage(),"options":options}
 
-def chat(messages, deep, cancel_event=None, deadline=None, progress=None):
+def chat(messages, deep, cancel_event=None, deadline=None, progress=None,profile='_chat'):
     """Text chat has no file/command tools; thinking and output share a fixed token cap."""
-    cfg=PROFILES['_chat']
+    cfg=PROFILES[profile]
     from .context import estimate
-    estimated=estimate(messages,None,'_chat')
+    estimated=estimate(messages,None,profile)
     if estimated>cfg['num_ctx']-5000:raise InferenceError('Conversation exceeds the safe context budget')
     from .gpu_policy import current
     options={'num_ctx':cfg['num_ctx'],'num_gpu':cfg['dual_num_gpu'] if current().get('mode')=='dual-vulkan' else cfg['num_gpu'],

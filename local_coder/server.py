@@ -15,6 +15,7 @@ from .settings import APP_ROOT, DATA_ROOT, PROFILES, DEFAULT_PROJECT
 from .sandbox import Sandbox
 from .images import ImageStore, MAX_UPLOAD_BYTES
 from .chat import Chats
+from .model_selection import CHAT_MODELS
 
 class Server(ThreadingHTTPServer):
     daemon_threads=True
@@ -52,7 +53,7 @@ class Handler(BaseHTTPRequestHandler):
             if path=="/":
                 html=(APP_ROOT/"local_coder/web/index.html").read_text().replace("__TOKEN__",self.server.token)
                 return self._send(200,html,"text/html; charset=utf-8")
-            if path in {"/app.js","/style.css"}:
+            if path in {"/app.js","/style.css","/time-format.js"}:
                 mime="text/javascript" if path.endswith(".js") else "text/css"
                 return self._send(200,(APP_ROOT/"local_coder/web"/path[1:]).read_bytes(),mime)
             if path.startswith('/assets/'):
@@ -69,6 +70,7 @@ class Handler(BaseHTTPRequestHandler):
                     k:{**v,"installed":v["model"] in names} for k,v in PROFILES.items() if not v.get('auxiliary')},
                     "vision":{"model":PROFILES['_vision']['model'],'installed':PROFILES['_vision']['model'] in names},
                     "chat_model":{"model":PROFILES['_chat']['model'],'installed':PROFILES['_chat']['model'] in names},
+                    "chat_models":{k:{**v,'model':PROFILES[v['profile']]['model'],'installed':PROFILES[v['profile']]['model'] in names} for k,v in CHAT_MODELS.items()},
                     "gpu":ollama.gpu_usage(),"ram_budget_gib":16,"error":error,
                     "hardware":__import__('local_coder.gpu_policy',fromlist=['inspect']).inspect()})
             if path=="/api/runs":return self._send(200,self.server.manager.list())
@@ -126,7 +128,7 @@ class Handler(BaseHTTPRequestHandler):
                     if self.server.chats.worker and self.server.chats.worker.is_alive():raise ValueError('Chat is using the model. Stop it or wait for the reply before coding.')
                     return self._send(202,self.server.manager.start(**data))
             if path=='/api/chats':
-                if set(data)-{'text','id','deep','web','attachments'}:raise ValueError('Unknown chat fields')
+                if set(data)-{'text','id','deep','web','attachments','model'}:raise ValueError('Unknown chat fields')
                 with self.server.activity_lock:
                     if self.server.manager.worker and self.server.manager.worker.is_alive():raise ValueError('A coding task is using the model. Stop it or wait for completion before chatting.')
                     return self._send(202,self.server.chats.start(**data))

@@ -57,3 +57,12 @@ class InferenceTests(unittest.TestCase):
         self.assertEqual(self.server.payload['options']['num_ctx'],16384)
         self.assertTrue(self.server.payload['think'])
         with self.assertRaisesRegex(ollama.InferenceError,'Unexpected thinking'):self.call()
+    def test_chat_model_override_keeps_profile_context_and_gpu_limits(self):
+        self.server.release.set()
+        with patch('local_coder.gpu_policy.current',return_value={'mode':'dual-vulkan'}):
+            answer,metrics=ollama.chat([{'role':'user','content':'Hello'}],False,deadline=time.monotonic()+5,profile='_chat_fast')
+        self.assertEqual(self.server.payload['model'],'qwen3.5:4b')
+        self.assertEqual(self.server.payload['options']['num_ctx'],8192)
+        self.assertEqual(self.server.payload['options']['num_gpu'],16)
+        self.assertEqual(self.server.payload['options']['num_predict'],2048)
+        self.assertFalse(self.server.payload['think'])

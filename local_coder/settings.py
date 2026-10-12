@@ -5,10 +5,16 @@ DATA_ROOT = Path.home() / ".local/share/local-coder"
 RUNS_ROOT = DATA_ROOT / "runs"
 TOOLCHAIN = DATA_ROOT / "toolchain"
 OLLAMA_URL = "http://127.0.0.1:11435"
+HELPER_URL = "http://127.0.0.1:11436"
 PROFILES = {
+    "_helper": {
+        "label": "Read-only assistant · 2B", "model": "qwen3.5:2b-q4_K_M",
+        "num_ctx": 4096, "num_gpu": 99, "dual_num_gpu": 99,
+        "num_predict": 512, "auxiliary": True,
+    },
     "_chat_fast": {
         "label": "Quick chat · 4B", "model": "qwen3.5:4b",
-        "num_ctx": 8192, "num_gpu": 16, "dual_num_gpu": 16,
+        "num_ctx": 8192, "num_gpu": 33, "dual_num_gpu": 33,
         "num_predict": 4096, "auxiliary": True,
     },
     "_chat": {
@@ -18,7 +24,7 @@ PROFILES = {
     },
     "_vision": {
         "label": "Local image reader · 4B", "model": "qwen3.5:4b",
-        "num_ctx": 8192, "num_gpu": 16, "dual_num_gpu": 16,
+        "num_ctx": 8192, "num_gpu": 33, "dual_num_gpu": 33,
         "num_predict": 1024, "auxiliary": True,
     },
     "power": {
@@ -27,8 +33,8 @@ PROFILES = {
         "num_predict": 1536,
     },
     "quality": {
-        "label": "Accuracy · 14B", "model": "qwen2.5-coder:14b-instruct-q4_K_M",
-        "num_ctx": 16384, "num_gpu": 28, "dual_num_gpu": 38, "num_predict": 1536,
+        "label": "Builder · 14B + optional 2B helper", "model": "qwen2.5-coder:14b-instruct-q4_K_M",
+        "num_ctx": 8192, "num_gpu": 28, "dual_num_gpu": 38, "num_predict": 1536,
     },
     "balanced": {
         "label": "Balanced · 9B", "model": "qwen3.5:9b",

@@ -1,0 +1,29 @@
+[Unit]
+Description=Local Coder GTX read-only 2B helper
+StartLimitIntervalSec=60
+StartLimitBurst=2
+
+[Service]
+ExecStart=/home/gerald/local-coder/.venv/bin/python -m local_coder.gpu_policy launch-helper
+Slice=local-coder-inference.slice
+Environment=OLLAMA_HOST=127.0.0.1:11436
+Environment=OLLAMA_MODELS=/home/gerald/.local/share/local-coder/models
+Environment=OLLAMA_NO_CLOUD=1
+Environment=OLLAMA_MAX_LOADED_MODELS=1
+Environment=OLLAMA_NUM_PARALLEL=1
+Environment=OLLAMA_MAX_QUEUE=1
+Environment=OLLAMA_FLASH_ATTENTION=1
+Environment=OLLAMA_KV_CACHE_TYPE=q8_0
+Environment=OLLAMA_CONTEXT_LENGTH=4096
+Environment=OLLAMA_VULKAN=1
+Environment=OLLAMA_GPU_OVERHEAD=536870912
+MemoryAccounting=yes
+MemoryHigh=3G
+MemoryMax=4G
+MemorySwapMax=0
+TasksMax=64
+CPUWeight=10
+CPUQuota=200%
+OOMPolicy=stop
+Restart=no
+TimeoutStopSec=10

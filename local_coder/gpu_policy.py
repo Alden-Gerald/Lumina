@@ -11,6 +11,7 @@ import time
 from .settings import DATA_ROOT
 
 POLICY=DATA_ROOT/"gpu-policy.json"
+HELPER_POLICY=DATA_ROOT/"helper-gpu-policy.json"
 RESERVED=DATA_ROOT/"vm-gpu-reserved"
 
 def inspect(sys_root=Path("/sys/bus/pci/devices"), vulkan_text=None):
@@ -55,17 +56,39 @@ def current():
     try:return json.loads(POLICY.read_text())
     except (OSError,ValueError):return inspect()
 
-def launch():
-    status=inspect();DATA_ROOT.mkdir(parents=True,exist_ok=True,mode=0o700)
-    POLICY.write_text(json.dumps(status,indent=2));POLICY.chmod(0o600)
+def helper_devices(status=None):
+    status=status or inspect()
+    if status['nvidia_reserved'] or status['nvidia_vfio']:return []
+    return [d['index'] for d in status['vulkan_devices'] if d['vendor']=='0x10de'
+            and ('1050' in d['name'] or 'GP107' in d['name'])]
+
+def builder_policy(status=None):
+    status=dict(status or inspect())
+    status['selected_indices']=[d['index'] for d in status['vulkan_devices']
+                                if d['vendor']=='0x1002' and '6600' in d['name']]
+    status['helper_indices']=helper_devices(status)
+    status['mode']='rx6600-helper' if status['helper_indices'] else 'rx6600-ram'
+    # NVIDIA ownership changes must never restart an active RX builder.
+    status['signature']=json.dumps(['rx-builder',status['selected_indices']])
+    status['explanation']='RX 6600 builder with CPU offload; separate optional GTX helper'
+    return status
+
+def launch(helper=False):
+    status=inspect() if helper else builder_policy()
+    indices=helper_devices(status) if helper else status['selected_indices']
+    if not indices:raise RuntimeError('Assigned GPU unavailable; refusing CPU fallback')
+    DATA_ROOT.mkdir(parents=True,exist_ok=True,mode=0o700)
+    path=HELPER_POLICY if helper else POLICY
+    status['selected_indices']=indices
+    path.write_text(json.dumps(status,indent=2));path.chmod(0o600)
     env=dict(os.environ)
     # Use a common Vulkan backend for mixed vendors; no CUDA/ROCm pooling claim.
     env["CUDA_VISIBLE_DEVICES"]="-1";env["ROCR_VISIBLE_DEVICES"]="-1"
-    env["GGML_VK_VISIBLE_DEVICES"]=",".join(map(str,status["selected_indices"])) or "-1"
+    env["GGML_VK_VISIBLE_DEVICES"]=",".join(map(str,indices))
     os.execve("/usr/local/bin/ollama",["ollama","serve"],env)
 
 def prepare():
-    actual=inspect();prior=current()
+    actual=builder_policy();prior=current()
     running=subprocess.run(["systemctl","--user","is-active","--quiet","local-coder-ollama.service"],capture_output=True).returncode==0
     if not running or actual["signature"]!=prior.get("signature"):
         subprocess.run(["systemctl","--user","restart","local-coder-ollama.service"],check=True,timeout=15)
@@ -76,9 +99,30 @@ def prepare():
         else:raise RuntimeError("Inference service did not become ready after GPU discovery")
     return current()
 
+def prepare_helper():
+    status=inspect();indices=helper_devices(status)
+    if not indices:return {'available':False,'reason':'GTX reserved or unavailable'}
+    try:prior=json.loads(HELPER_POLICY.read_text())
+    except (OSError,ValueError):prior={}
+    unit='local-coder-helper.service'
+    running=subprocess.run(['systemctl','--user','is-active','--quiet',unit],capture_output=True).returncode==0
+    if not running or prior.get('selected_indices')!=indices:
+        subprocess.run(['systemctl','--user','restart',unit],check=True,timeout=15)
+    from .ollama import api
+    from .settings import HELPER_URL,PROFILES
+    for _ in range(30):
+        if RESERVED.exists():return {'available':False,'reason':'GTX reserved for VM'}
+        try:
+            names={m['name'] for m in api('/api/tags',base=HELPER_URL,timeout=2)['models']}
+            if PROFILES['_helper']['model'] not in names:return {'available':False,'reason':'2B helper model is not installed'}
+            return {'available':True,'indices':indices,'model':PROFILES['_helper']['model']}
+        except OSError:time.sleep(.2)
+    return {'available':False,'reason':'GTX worker did not become ready'}
+
 def reserve():
     DATA_ROOT.mkdir(parents=True,exist_ok=True,mode=0o700);RESERVED.touch(mode=0o600)
     status=current()
+    subprocess.run(["systemctl","--user","stop","local-coder-helper.service"],check=True,timeout=30)
     if status.get("mode")=="dual-vulkan":
         # Stop only our private service before a VM takes the card. No PCI rebinding.
         subprocess.run(["systemctl","--user","stop","local-coder-ollama.service"],check=True,timeout=30)
@@ -91,4 +135,5 @@ def release():
 
 if __name__=="__main__":
     if sys.argv[1:]==["launch"]:launch()
+    elif sys.argv[1:]==["launch-helper"]:launch(helper=True)
     else:print(json.dumps(inspect(),indent=2))

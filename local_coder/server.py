@@ -73,7 +73,11 @@ class Handler(BaseHTTPRequestHandler):
                     "chat_model":{"model":PROFILES['_chat']['model'],'installed':PROFILES['_chat']['model'] in names},
                     "chat_models":{k:{**v,'model':PROFILES[v['profile']]['model'],'installed':PROFILES[v['profile']]['model'] in names} for k,v in CHAT_MODELS.items()},
                     "gpu":ollama.gpu_usage(),"ram_budget_gib":16,"error":error,
-                    "hardware":__import__('local_coder.gpu_policy',fromlist=['inspect']).inspect()})
+                    "maintenance":(DATA_ROOT/'maintenance').exists(),
+                    "team":{"builder_gpu":"RX 6600","helper_gpu":"GTX 1050 Ti",
+                            "helper_model":PROFILES['_helper']['model'],'helper_installed':PROFILES['_helper']['model'] in names,
+                            "aggregate_ram_gib":16,"helpers_parallel_with_builder":True},
+                    "hardware":__import__('local_coder.gpu_policy',fromlist=['builder_policy']).builder_policy()})
             if path=="/api/runs":return self._send(200,self.server.manager.list())
             if path=='/api/chats':return self._send(200,self.server.chats.list())
             parts=path.strip('/').split('/')
@@ -135,15 +139,17 @@ class Handler(BaseHTTPRequestHandler):
                 from .gpu_policy import release
                 return self._send(200,release())
             if path=="/api/runs":
+                if (DATA_ROOT/'maintenance').exists():raise ValueError('Brief local maintenance; try again shortly. Saved work is preserved.')
                 command=data.pop("check_command","")
                 if command:
                     data["test_commands"]=[shlex.split(command)]
-                allowed={"task","source","profile","project_profile","test_commands","acceptance","attachments"}
+                allowed={"task","source","profile","project_profile","test_commands","acceptance","attachments","team"}
                 if set(data)-allowed:raise ValueError("Unknown task fields")
                 with self.server.activity_lock:
                     if self.server.chats.worker and self.server.chats.worker.is_alive():raise ValueError('Chat is using the model. Stop it or wait for the reply before coding.')
                     return self._send(202,self.server.manager.start(**data))
             if path=='/api/chats':
+                if (DATA_ROOT/'maintenance').exists():raise ValueError('Brief local maintenance; try again shortly. Saved work is preserved.')
                 if set(data)-{'text','id','deep','web','attachments','model'}:raise ValueError('Unknown chat fields')
                 with self.server.activity_lock:
                     if self.server.manager.worker and self.server.manager.worker.is_alive():raise ValueError('A coding task is using the model. Stop it or wait for completion before chatting.')
@@ -152,6 +158,7 @@ class Handler(BaseHTTPRequestHandler):
             if len(parts)==4 and parts[:2]==['api','chats'] and parts[3]=='cancel':return self._send(200,self.server.chats.cancel(parts[2]))
             if len(parts)==4 and parts[:2]==['api','chats']:
                 action=parts[3];id=parts[2]
+                if action=='redo' and (DATA_ROOT/'maintenance').exists():raise ValueError('Brief local maintenance; try again shortly.')
                 allowed={'feedback':{'message_id','rating','note'},'feedback-export':{'message_id'},
                     'branch':{'message_id'},'redo':{'message_id','model','deep','web'}}
                 if action not in allowed:raise ValueError('Unknown response action')

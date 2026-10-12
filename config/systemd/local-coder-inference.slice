@@ -1,0 +1,9 @@
+[Unit]
+Description=Shared Local Coder inference memory budget
+
+[Slice]
+MemoryAccounting=yes
+MemoryHigh=14G
+MemoryMax=16G
+MemorySwapMax=0
+CPUWeight=20

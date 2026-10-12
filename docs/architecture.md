@@ -4,7 +4,10 @@
 flowchart TD
     U[Local dashboard or CLI: one task + acceptance checks] --> C[Single-task controller]
     C --> G[Detect VM ownership and host-visible Vulkan GPUs]
-    G --> L[Private Ollama: quantized model + CPU offload]
+    G --> L[RX worker: 14B quantized builder + CPU offload]
+    G --> H[GTX worker: optional read-only 2B helper]
+    H --> HA[Scout, test suggestions and advisory review]
+    HA -->|Revision-tagged advisory findings| A
     C --> W[Snapshot current project into disposable Git workspace]
     W --> B[Baseline source checks]
     B --> P[Model produces a short structured plan]
@@ -15,6 +18,9 @@ flowchart TD
     A --> S[Offline terminal sandbox]
     R --> O[Observation]
     F --> O
+    F --> CS[Immutable source revision]
+    CS --> CC[CPU syntax and behavior checks in read-only sandbox]
+    CC -->|Exact revision results| O
     S --> E[Exit status + bounded compiler output]
     E --> O
     O --> A
@@ -27,10 +33,13 @@ flowchart TD
     D -->|User applies| X[Check source conflicts, back up, apply files]
 ```
 
-Model inference is sequential. The reviewer is a fresh request to the same local
-model, rather than another simultaneous GPU process. It is a second pass, not an
-independent model guarantee. Required tests supplied by the operator are separate
-from both model passes.
+The builder and optional GTX helper infer concurrently. The helper serves its
+roles sequentially with at most four requests per task and no tools. Background
+checks use one CPU worker; a newer patch cancels obsolete checks. Reports are
+accepted only for the full matching source manifest. Final review remains a
+fresh request to the builder; neither review is a correctness guarantee.
+Required operator tests are independent of both model passes. Both inference
+services share one 16 GiB RAM cap, with Q8 KV cache and no swap.
 
 The trusted controller owns model options, task budgets, validation and commit.
 The model cannot change context size, load models, increase resource budgets,
@@ -61,16 +70,18 @@ to match the task's starting manifest. Unrelated user edits remain untouched.
 
 Hardware selection happens at task boundaries. The inference process uses only
 the selected Vulkan devices. NVIDIA bound to VFIO is excluded even if a stale
-enumeration claims it exists. Explicit VM reservation excludes it too. A mode
-change restarts only the private inference service; it does not mutate PCI drivers.
-Mixed-vendor distribution and handback remain subject to real driver qualification.
+enumeration claims it exists. Explicit VM reservation excludes it too. The RX service signature is independent of GTX ownership. Reservation stops
+only the GTX worker; the builder continues. Device-index changes are handled
+between tasks. No policy code mutates PCI drivers. Manual reservation during
+real concurrent inference was tested; physical Windows handback remains untested.
 
 ## Study conversations and visual inputs
 
 The loopback HTTP server owns both Managers and a shared activity lock. Starting
 a code run checks the chat worker; starting a reply checks the coding worker.
 The workers retain the inference slot through cleanup/unload. GPU handback
-cancels both classes of active work if the current hardware policy is dual mode.
+stops only the GTX helper under the new policy. Legacy dual-mode policy files
+still trigger cancellation before migration to separate workers.
 
 Chat: user question + saved complete recent pairs → optional image reader →
 optional bounded query plan → Google-first SearXNG → validated public result

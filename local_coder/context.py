@@ -5,7 +5,7 @@ from .settings import DATA_ROOT
 
 @functools.lru_cache(maxsize=2)
 def tokenizer(profile):
-    name={'power':'qwen3-coder.json','quality':'qwen2.5-coder.json','_chat':'qwen3.json','_chat_fast':'qwen3.5.json'}.get(profile)
+    name={'power':'qwen3-coder.json','quality':'qwen2.5-coder.json','_chat':'qwen3.json','_chat_fast':'qwen3.5.json','_helper':'qwen3.5-2b.json'}.get(profile)
     if not name:return None
     path=DATA_ROOT/'tokenizers'/name
     if not path.exists():return None

@@ -11,6 +11,14 @@ class ToolsTests(unittest.TestCase):
         (self.root/".git").mkdir();(self.root/".git/config").write_text("protected")
         self.tools=Tools(self.root,None)
     def tearDown(self):self.temp.cleanup()
+    def test_existing_node_behavior_tests_cannot_be_weakened(self):
+        for name in ['test-battery.cjs','battery.test.cjs','battery.spec.mjs']:
+            (self.root/name).write_text('assert.equal(label(75,true),"⚡ 75%");')
+        tools=Tools(self.root,None)
+        for name in ['test-battery.cjs','battery.test.cjs','battery.spec.mjs']:
+            before=tools.read_file(name)
+            with self.assertRaisesRegex(ValueError,'protected'):
+                tools.file_patch(name,before['sha256'],'assert.equal','console.log')
     def test_stale_and_ambiguous_patches_are_rejected(self):
         data=self.tools.read_file("a.py")
         with self.assertRaisesRegex(ValueError,"hash"):self.tools.file_patch("a.py","wrong","1","2")

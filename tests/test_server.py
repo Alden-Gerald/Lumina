@@ -58,3 +58,16 @@ class ServerTests(unittest.TestCase):
                     error.exception.close()
                 manager.return_value.start.assert_not_called()
             finally:server.shutdown();server.server_close();thread.join()
+    def test_document_upload_download_and_kind_are_preserved(self):
+        with tempfile.TemporaryDirectory() as d,patch('local_coder.server.DATA_ROOT',Path(d)),patch('local_coder.server.Manager'):
+            server=Server(('127.0.0.1',0));thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
+            base=f'http://127.0.0.1:{server.server_address[1]}';opener=urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            data=b'The calibration constant is 37.5 volts.'
+            try:
+                req=urllib.request.Request(base+'/api/attachments',data,{'X-Local-Coder-Token':server.token,'X-Upload-Name':'lecture.txt','Content-Type':'text/plain'})
+                with opener.open(req,timeout=5) as r:metadata=json.load(r)
+                self.assertEqual(metadata['kind'],'document');self.assertGreater(metadata['characters'],0)
+                with opener.open(base+metadata['url'],timeout=3) as r:
+                    self.assertEqual(r.read(),data);self.assertEqual(r.headers.get_content_type(),'application/octet-stream')
+                    self.assertIn('attachment;',r.headers['Content-Disposition'])
+            finally:server.shutdown();server.server_close();thread.join()

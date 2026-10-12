@@ -7,7 +7,7 @@ name = "local-coder"
 version = "0.1.0"
 description = "Bounded local coding agent for an RX 6600 and Quickshell"
 requires-python = ">=3.11"
-dependencies = ["mcp>=2.3,<3", "tokenizers>=0.22,<1", "httpx>=0.28,<1", "Pillow>=12,<14"]
+dependencies = ["mcp>=2.3,<3", "tokenizers>=0.22,<1", "httpx>=0.28,<1", "Pillow>=12,<14", "openpyxl>=3.1,<4", "xlrd>=2.0,<3", "defusedxml>=0.7,<1"]
 
 [project.scripts]
 local-coder = "local_coder.cli:main"

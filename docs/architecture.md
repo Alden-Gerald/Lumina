@@ -64,3 +64,29 @@ the selected Vulkan devices. NVIDIA bound to VFIO is excluded even if a stale
 enumeration claims it exists. Explicit VM reservation excludes it too. A mode
 change restarts only the private inference service; it does not mutate PCI drivers.
 Mixed-vendor distribution and handback remain subject to real driver qualification.
+
+## Study conversations and visual inputs
+
+The loopback HTTP server owns both Managers and a shared activity lock. Starting
+a code run checks the chat worker; starting a reply checks the coding worker.
+The workers retain the inference slot through cleanup/unload. GPU handback
+cancels both classes of active work if the current hardware policy is dual mode.
+
+Chat: user question + saved complete recent pairs → optional image reader →
+optional bounded query plan → Google-first SearXNG → validated public result
+links and bounded snippets → Qwen3 14B thinking/text stream → saved final answer
+and source metadata. Search never hands shell/file tools to the chat model.
+The dashboard polls the saved stream every 2.5s. It renders text with DOM nodes,
+not arbitrary model-generated HTML. All network requests require a local session
+token, valid Host and same-origin checks at the dashboard boundary.
+
+Image uploads have bounded compressed size, pixels and concurrent decodes. The
+normalized image has a content hash and an opaque local ID; inference validates
+it before use. The 4B image reader returns constrained factual JSON. Models run
+sequentially and image descriptions remain explicitly untrusted/approximate.
+
+SearXNG is an independently pinned upstream checkout with its own virtualenv,
+loopback listener and systemd resource limits. The agent consumes only its search
+result JSON and does not fetch arbitrary returned URLs, reducing URL-fetch abuse.
+Search queries are the only university-study data deliberately sent online by
+this implementation when search is enabled. Code command sandboxes stay offline.

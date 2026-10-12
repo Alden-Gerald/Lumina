@@ -2,6 +2,8 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+import io
+from PIL import Image
 from local_coder.controller import Manager
 from local_coder.project import digest
 from local_coder.sandbox import Sandbox
@@ -72,5 +74,22 @@ class ControllerTests(unittest.TestCase):
         self.assertEqual(state["status"],"needs_attention")
         self.assertIn("Repeated identical",state["message"])
         self.assertNotIn("commit",state)
+    def test_visual_description_reaches_plan_and_coding_without_raw_image(self):
+        self.calls=0;seen=[]
+        def inference(messages,schema,profile,*args):
+            seen.append(profile)
+            if profile=='_vision':
+                self.assertIn('images',messages[-1])
+                return {'description':'Blue rectangle marked ADD','visible_text':['ADD'],'design_details':[],'uncertainties':[]},{}
+            if 'objective' in schema['properties']:self.assertIn('Blue rectangle marked ADD',messages[-1]['content'])
+            else:self.assertNotIn('images',messages[-1])
+            return self.fake(messages,schema,profile,*args)
+        m=Manager(self.base/'runs',inference=inference)
+        buf=io.BytesIO();Image.new('RGB',(20,10),'blue').save(buf,format='PNG')
+        a=m.image_store.save(buf.getvalue(),'reference.png')
+        state=m.start('Fix addition using the reference',source=self.source,attachments=[a['id']],
+            test_commands=[['python3','-c','from calc import add; assert add(3,2)==5']],background=False)
+        self.assertEqual(state['status'],'completed',state['message'])
+        self.assertEqual(seen[0],'_vision');self.assertEqual(state['visual_observations'][0]['analysis']['visible_text'],['ADD'])
 
 if __name__=="__main__":unittest.main()

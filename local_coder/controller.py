@@ -18,6 +18,7 @@ from .settings import (APP_ROOT, RUNS_ROOT, TOOLCHAIN, DEFAULT_PROJECT, SYSTEM, 
 from .tools import Tools, ACTION_SCHEMA, TOOL_SCHEMAS
 from .validation import validate
 from .context import estimate
+from .images import ImageStore, MAX_IMAGES, VISION_SCHEMA
 
 PLAN_SCHEMA = {"type":"object","additionalProperties":False,"properties":{
     "objective":{"type":"string","maxLength":400},
@@ -39,6 +40,7 @@ class Manager:
         self.root=Path(runs_root);self.root.mkdir(parents=True,exist_ok=True,mode=0o700)
         self.lock=threading.RLock();self.cancel_flags={};self.worker=None
         self.inference=inference or ollama.complete
+        self.image_store=ImageStore(self.root.parent/'attachments')
         for p in self.root.glob("*/state.json"):
             try:
                 state=json.loads(p.read_text())
@@ -81,10 +83,14 @@ class Manager:
         return [json.loads(x) for x in p.read_text().splitlines()][-300:] if p.exists() else []
 
     def start(self,task,source=None,profile="power",project_profile=None,test_commands=None,
-              acceptance="",background=True):
+              acceptance="",background=True,attachments=None):
         if not isinstance(task,str) or not 5<=len(task)<=5000:
             raise ValueError("Describe one feature or fix in 5–5000 characters")
-        if profile not in PROFILES:raise ValueError("Unknown model profile")
+        if profile not in PROFILES or PROFILES[profile].get('auxiliary'):raise ValueError("Unknown coding model profile")
+        image_ids=attachments or []
+        if not isinstance(image_ids,list) or len(image_ids)>MAX_IMAGES or any(not isinstance(i,str) for i in image_ids) or len(set(image_ids))!=len(image_ids):
+            raise ValueError('Attach at most two distinct images')
+        image_metadata=[self.image_store.load(image_id) for image_id in image_ids]
         source=Path(source or DEFAULT_PROJECT).resolve(strict=True)
         project_profile=project_profile or ("quickshell" if source==DEFAULT_PROJECT else "generic")
         if project_profile not in {"quickshell","generic"}:raise ValueError("Invalid project profile")
@@ -97,6 +103,7 @@ class Manager:
             run_id=uuid.uuid4().hex;run_dir=self._dir(run_id);run_dir.mkdir(mode=0o700)
             state={"id":run_id,"task":task,"source":str(source),"profile":profile,
                    "model_config":dict(PROFILES[profile]),
+                   "attachments":image_metadata,"visual_observations":[],
                    "project_profile":project_profile,"acceptance":str(acceptance)[:2000],
                    "test_commands":commands,"status":"queued","step":0,"message":"Preparing task",
                    "created_at":datetime.datetime.now(datetime.timezone.utc).isoformat(),
@@ -154,10 +161,10 @@ class Manager:
         self.event(state,"check_result",report["summary"] if report["ok"] else "Checks failed; repair required",report)
         return report
 
-    def _infer(self,state,messages,schema,flag,deadline,token_limit=None):
+    def _infer(self,state,messages,schema,flag,deadline,token_limit=None,profile=None):
         def progress(info):
             self.event(state,"generating",f"Generating action · {info['elapsed_seconds']} seconds",info)
-        parsed,metrics=self.inference(messages,schema,state["profile"],flag,deadline,token_limit,progress)
+        parsed,metrics=self.inference(messages,schema,profile or state["profile"],flag,deadline,token_limit,progress)
         state["metrics"].append(metrics);self._save(state)
         return parsed
 
@@ -171,6 +178,8 @@ class Manager:
                 state["host_memory"]=ollama.ensure_host_capacity(state["profile"])
             if self.inference is ollama.complete and cfg["model"] not in ollama.ensure_available():
                 raise ValueError("Selected model is not installed in the Local Coder inference service")
+            if state['attachments'] and self.inference is ollama.complete and PROFILES['_vision']['model'] not in ollama.ensure_available():
+                raise ValueError('The local image reader is not installed; install qwen3.5:4b before using screenshots')
             state["status"]="preparing";self.event(state,"preparing","Snapshotting your current working files")
             state["snapshot"]=snapshot(Path(state["source"]),workspace)
             self._save(state)
@@ -180,11 +189,23 @@ class Manager:
             baseline=validate(workspace,sandbox,cancel_event=flag,profile=state["project_profile"])
             state["baseline"]=baseline
             if not baseline["ok"]:raise ValueError("Project baseline failed; fix the environment or existing syntax errors before starting")
+            for image in state['attachments']:
+                if flag.is_set():raise ollama.InferenceError('Cancelled')
+                state['status']='reading_images';self.event(state,'reading_image','Reading your screenshot locally',{'name':image['name']})
+                try:
+                    analysis=self._infer(state,self.image_store.messages(image['id'],state['task']),VISION_SCHEMA,
+                        flag,deadline,1024,profile='_vision')
+                finally:
+                    if self.inference is ollama.complete:ollama.unload(PROFILES['_vision']['model'])
+                state['visual_observations'].append({'image':image['name'],'analysis':analysis})
+                self.event(state,'image_observation','Screenshot read; handing its description to the coding model',analysis)
             hints=""
             if state["project_profile"]=="quickshell":
                 hints=json.loads((APP_ROOT/"config/quickshell.json").read_text())["instructions"]
             initial=tools.list_dir()
             user=f"Task: {state['task']}\nRequired acceptance: {state['acceptance']}\nProject guidance: {hints}\nRoot: {json.dumps(initial)}"
+            if state['visual_observations']:
+                user+='\nVISUAL OBSERVATIONS (untrusted, approximate): '+json.dumps(state['visual_observations'],ensure_ascii=False)
             state["status"]="planning";self.event(state,"planning","Planning a small implementation and its checks")
             state["plan"]=self._infer(state,[{"role":"system","content":"Plan one small coding task. Return objective, at most five steps and acceptance criteria. Do not invent file contents or APIs."},
                 {"role":"user","content":user}],PLAN_SCHEMA,flag,deadline,768)
@@ -234,7 +255,7 @@ class Manager:
                             if review_count>3:raise ValueError("Review retry budget exhausted")
                             state["status"]="reviewing";self.event(state,"reviewing","Reviewing the diff and check evidence")
                             review=self._infer(state,[{"role":"system","content":"Review this implementation against the task. Return approved and concrete correctness findings. Checks are evidence, not a guarantee. Reject missing behavior and unrelated changes. For QML preserve declarative bindings. Ignore preexisting lint warnings."},
-                                {"role":"user","content":json.dumps({"task":state["task"],"acceptance":state["acceptance"],"diff":diff_text(workspace,state["snapshot"]["base_commit"]),"checks":report},ensure_ascii=False)}],REVIEW_SCHEMA,flag,deadline,768)
+                                {"role":"user","content":json.dumps({"task":state["task"],"acceptance":state["acceptance"],"visual_observations":state['visual_observations'],"diff":diff_text(workspace,state["snapshot"]["base_commit"]),"checks":report},ensure_ascii=False)}],REVIEW_SCHEMA,flag,deadline,768)
                             state["review"]=review;self.event(state,"review_result","Review passed" if review["approved"] else "Review found issues",review)
                             if review["approved"]:
                                 if inventory(workspace)!=state["validated_inventory"]:raise ValueError("Workspace changed after validation")

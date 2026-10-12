@@ -229,9 +229,13 @@ class Manager:
                 current=self._scope(state,workspace)
                 # Keep complete recent turns; current task, plan and failure ledger stay anchored.
                 messages[1]["content"]=task+"\nRecent failed attempts: "+json.dumps(state["failed_attempts"][-4:])
+                removed=0
                 while estimate(messages,ACTION_SCHEMA,state["profile"])>cfg["num_ctx"]-2500:
                     if len(messages)<=4:raise ValueError("Latest observation exceeds context budget; request fewer lines")
-                    del messages[2:4]
+                    if not removed:
+                        state['status']='optimizing';self.event(state,'optimizing','Optimizing the conversation · retaining task, plan, recent failures and latest observations')
+                    del messages[2:4];removed+=1
+                if removed:self.event(state,'optimized',f'Conversation optimized · {removed} older action/observation pairs removed from model context',{'full_activity_saved':True,'input_tokens_estimate':estimate(messages,ACTION_SCHEMA,state['profile'])})
                 state["status"]="working";self.event(state,"working",f"Choosing action {step} of {MAX_STEPS}")
                 try:action=self._infer(state,messages,ACTION_SCHEMA,flag,deadline)
                 except ollama.InferenceError as exc:
@@ -249,7 +253,10 @@ class Manager:
                 fingerprint=json.dumps([name,args,current],sort_keys=True)
                 seen[fingerprint]+=1
                 if seen[fingerprint]>2:raise ValueError("Repeated identical action without progress; stopped")
-                self.event(state,"action",str(action["summary"])[:240],{"tool":name,"arguments":args})
+                label={'read_file':'Reading file','list_dir':'Exploring folder','search_code':'Searching code',
+                    'file_patch':'Editing file','create_file':'Creating file','run_command':'Running command',
+                    'verify':'Checking implementation','finish':'Finishing implementation','stop':'Stopping task'}.get(name,'Using tool')
+                self.event(state,"action",label+' · '+str(action["summary"])[:240],{"tool":name,"arguments":args})
                 if name=="stop":raise ValueError(str(args.get("reason","Model requested assistance")))
                 if name=="verify":
                     observation=self._verify(state,workspace,sandbox,flag,baseline)

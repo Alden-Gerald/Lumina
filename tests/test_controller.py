@@ -4,6 +4,7 @@ import tempfile
 import unittest
 import io
 from PIL import Image
+from unittest.mock import patch
 from local_coder.controller import Manager
 from local_coder.project import digest
 from local_coder.sandbox import Sandbox
@@ -65,6 +66,20 @@ class ControllerTests(unittest.TestCase):
             test_commands=[["python3","-c","from calc import add; assert add(3,2)==5"]],background=False)
         self.assertEqual(state["status"],"completed",state["message"])
         self.assertTrue(state["failed_attempts"])
+    def test_context_compaction_is_logged_and_keeps_latest_observation_and_task(self):
+        self.calls=0;seen=[]
+        def infer(messages,*args):
+            seen.append(json.dumps(messages));return self.fake(messages,*args)
+        m=Manager(self.base/'runs',inference=infer)
+        # Simulate a full window after two action/observation pairs.
+        with patch('local_coder.controller.estimate',side_effect=lambda messages,*_:999999 if len(messages)>4 else 100):
+            state=m.start('Fix the addition function',source=self.source,project_profile='generic',
+                test_commands=[['python3','-c','from calc import add; assert add(3,2)==5']],background=False)
+        self.assertEqual(state['status'],'completed',state['message'])
+        events=m.events(state['id']);self.assertTrue(any(e['kind']=='optimized' for e in events))
+        self.assertTrue(any('Reading file' in e['message'] for e in events))
+        self.assertTrue(any('Editing file' in e['message'] for e in events))
+        self.assertIn('Fix the addition function',seen[-2]);self.assertIn('Recent failed attempts',seen[-2])
     def test_repeated_actions_stop_without_commit(self):
         def inference(messages,schema,*args):
             if "objective" in schema["properties"]:return {"objective":"Read","steps":["Read"],"acceptance":[]},{}

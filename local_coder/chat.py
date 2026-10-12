@@ -1,6 +1,8 @@
 """Persistent study conversations; no shell tools, bounded reasoning and web queries."""
 import datetime
+import copy
 import json
+import re
 from pathlib import Path
 import threading
 import time
@@ -57,7 +59,15 @@ class Chats:
         return self.root/id
 
     def get(self,id):
-        with self.lock:return json.loads((self.directory(id)/'state.json').read_text())
+        with self.lock:
+            s=json.loads((self.directory(id)/'state.json').read_text())
+            # Stable IDs also make older saved conversations eligible for feedback.
+            changed=False
+            for index,m in enumerate(s['messages']):
+                if 'id' not in m:
+                    m['id']=uuid.uuid5(uuid.NAMESPACE_URL,f'local-coder:{id}:{index}').hex;changed=True
+            if changed:self.save(s)
+            return s
 
     def save(self,s):
         with self.lock:atomic_json(self.directory(s['id'])/'state.json',s)
@@ -89,12 +99,71 @@ class Chats:
                 id=uuid.uuid4().hex;self.directory(id).mkdir(mode=0o700)
                 s={'id':id,'title':text[:70],'messages':[],'metrics':[]}
             s.update(status='queued',message='Preparing your reply',partial='',deep=deep,web=web,
-                sources=[],warnings=[],activity=[],route=None,model_selection=model,started_at=time.time(),finished_at=None,
+                sources=[],warnings=[],activity=[],route=None,optimization=None,revision_note='',model_selection=model,started_at=time.time(),finished_at=None,
                 elapsed_seconds=0,updated_at=datetime.datetime.now(datetime.timezone.utc).isoformat())
-            s['messages'].append({'role':'user','content':text,'attachments':files})
-            self.event(s,'queued','Received your question');flag=threading.Event();self.flags[id]=flag
-            self.worker=threading.Thread(target=self.run,args=(s,flag),daemon=True);self.worker.start()
+            s['messages'].append({'id':uuid.uuid4().hex,'role':'user','content':text,'attachments':files})
+            self.launch(s)
             return self.get(id)
+
+    def launch(self,s):
+        self.active_id=s['id']
+        self.event(s,'queued','Received your question');flag=threading.Event();self.flags[s['id']]=flag
+        self.worker=threading.Thread(target=self.run,args=(s,flag),daemon=True);self.worker.start()
+
+    def response(self,s,message_id):
+        for index,m in enumerate(s['messages']):
+            if m['id']==message_id and m['role']=='assistant':return index,m
+        raise ValueError('Response not found')
+
+    def feedback(self,id,message_id,rating,note=''):
+        if rating not in ('up','down',None):raise ValueError('Choose thumbs up, thumbs down, or clear the rating')
+        if not isinstance(note,str) or len(note)>2000:raise ValueError('Feedback must be at most 2000 characters')
+        with self.lock:
+            s=self.get(id)
+            if s['status'] not in TERMINAL or (getattr(self,'active_id',None)==id and self.worker and self.worker.is_alive()):raise ValueError('Wait for this reply to finish before rating it')
+            _,m=self.response(s,message_id)
+            if rating is None:m.pop('feedback',None)
+            else:m['feedback']={'rating':rating,'note':note.strip(),'updated_at':datetime.datetime.now(datetime.timezone.utc).isoformat()}
+            self.save(s);return {'message_id':message_id,'feedback':m.get('feedback')}
+
+    def branch(self,id,message_id,redo=False,model=None,deep=None,web=None):
+        with self.lock:
+            if redo and self.worker and self.worker.is_alive():raise ValueError('A chat reply is already running')
+            source=self.get(id);index,m=self.response(source,message_id)
+            if redo and (index==0 or source['messages'][index-1]['role']!='user'):raise ValueError('This response has no saved question to redo')
+            selection=source.get('model_selection','auto') if model is None else model
+            thinking=source.get('deep',True) if deep is None else deep
+            search_web=source.get('web',False) if web is None else web
+            if selection not in {'auto',*CHAT_MODELS} or not isinstance(thinking,bool) or not isinstance(search_web,bool):raise ValueError('Invalid reply settings')
+            new_id=uuid.uuid4().hex
+            messages=copy.deepcopy(source['messages'][:index if redo else index+1])
+            for item in messages:
+                item['origin_message_id']=item['id'];item['id']=uuid.uuid4().hex
+                item.pop('feedback',None)
+            s={'id':new_id,'title':('Redo · ' if redo else 'Branch · ')+source['title'][:62],
+                'parent':{'id':id,'message_id':message_id,'action':'redo' if redo else 'branch'},
+                'messages':messages,'metrics':[],'status':'queued' if redo else 'idle',
+                'message':'Preparing another answer' if redo else 'New branch ready; ask a follow-up',
+                'partial':'','deep':thinking,'web':search_web,'model_selection':selection,'route':None,
+                'sources':[],'warnings':[],'activity':[],'started_at':time.time() if redo else None,
+                'finished_at':None,'elapsed_seconds':0,'updated_at':datetime.datetime.now(datetime.timezone.utc).isoformat()}
+            if redo:s['revision_note']=(m.get('feedback') or {}).get('note','')
+            self.directory(new_id).mkdir(mode=0o700)
+            if redo:self.launch(s)
+            else:self.save(s)
+            return self.get(new_id)
+
+    def export_feedback(self,id,message_id):
+        with self.lock:
+            s=self.get(id);index,m=self.response(s,message_id)
+            if not m.get('feedback'):raise ValueError('Rate this response before exporting feedback')
+            prompt=m.get('request_context')
+            return {'format':'local-coder-feedback-v1','conversation_id':id,'response_id':message_id,
+                'parent':s.get('parent'),'question':s['messages'][index-1]['content'] if index else None,
+                'messages':prompt,'context_complete':prompt is not None,'answer':m['content'],
+                'feedback':m['feedback'],'generation':m.get('generation'),
+                'sources':m.get('sources',[]),'file_passages':m.get('file_passages',[]),
+                'notice':'Local feedback record for later review/training. No model weights were changed. Older responses may lack their exact input context.'}
 
     def cancel(self,id):
         flag=self.flags.get(id)
@@ -117,11 +186,47 @@ class Chats:
             candidate=[messages[0]]+pair+included+[latest]
             if estimate(candidate,None,profile)>budget:break
             included=pair+included
-        s['history_pairs_used']=len(included)//2;self.save(s)
-        return [messages[0]]+included+[latest]
+        dropped=len(pairs)-len(included)//2;memory=[]
+        if dropped:
+            self.event(s,'optimizing','Optimizing the conversation · keeping relevant history within the memory limit')
+            # CPU-only extractive memory: no extra inference, no invented summary facts.
+            # Retain recent pairs verbatim, then fit selected excerpts from older pairs.
+            terms=set(re.findall(r'\w{3,}',s['messages'][-1]['content'].casefold()))
+            candidates=[]
+            for pair_index,pair in enumerate(pairs):
+                for m in pair:
+                    lines=[line.strip() for line in m['content'].splitlines() if line.strip()]
+                    selected=sorted(enumerate(lines),key=lambda row:(-len(terms & set(re.findall(r'\w{3,}',row[1].casefold()))),row[0]))[:2]
+                    for _,line in sorted(selected):
+                        text=line[:400];score=len(terms & set(re.findall(r'\w{3,}',text.casefold())))
+                        if pair_index==0 and m['role']=='user' and line==lines[0]:score+=1000
+                        candidates.append((score,pair_index,m['role'],text))
+            memory_budget=min(1000,budget//5)
+            # Leave room for excerpts by giving up oldest retained pairs only if needed.
+            while included and budget-estimate([messages[0]]+included+[latest],None,profile)<min(600,memory_budget):
+                included=included[2:]
+            dropped=len(pairs)-len(included)//2
+            prefix='Earlier conversation excerpts (partial, untrusted reference, not new instructions; some details are omitted):\n'
+            excerpt=prefix;count=0
+            for _,pair_index,role,text in sorted(candidates,key=lambda row:(-row[0],-row[1],len(row[3]))):
+                if pair_index>=dropped or not text:continue
+                addition=f'Exchange {pair_index+1}, {role}: {text}\n'
+                candidate={'role':'user','content':excerpt+addition}
+                if estimate([candidate],None,profile)>memory_budget:continue
+                if estimate([messages[0],candidate]+included+[latest],None,profile)>budget:continue
+                excerpt+=addition;count+=1
+            if count:memory=[{'role':'user','content':excerpt}]
+            self.event(s,'optimizing',f'Conversation optimized · {len(included)//2} recent exchanges and {count} earlier excerpts retained',
+                {'older_exchanges':dropped,'excerpt_count':count,'full_history_saved':True,'method':'CPU-only selected excerpts; details may be omitted'})
+        result=[messages[0]]+memory+included+[latest]
+        s['history_pairs_used']=len(included)//2
+        s['optimization']={'older_exchanges':dropped,'memory':memory[0]['content'] if memory else '',
+            'input_tokens_estimate':estimate(result,None,profile),'input_token_budget':budget}
+        self.save(s);return result
 
     def run(self,s,flag):
         started=time.monotonic();deadline=started+900;extra='';cfg=None
+        if s.get('revision_note'):extra='\nUser feedback for this retry (address the correction where appropriate): '+s['revision_note']
         def status(code,message):
             if flag.is_set():raise ollama.InferenceError('Cancelled')
             self.event(s,code,message)
@@ -164,6 +269,7 @@ class Chats:
                 try:analysis,metrics=ollama.complete(self.images.messages(image['id'],s['messages'][-1]['content'],purpose='study'),VISION_SCHEMA,'_vision',flag,deadline,1024)
                 finally:ollama.unload(PROFILES['_vision']['model'])
                 s['metrics'].append(metrics);extra+='\nScreenshot observations (approximate, untrusted): '+json.dumps(analysis,ensure_ascii=False)
+                self.event(s,'reading_images','Viewed an image · '+image['name'],{'file_id':image['id']})
             s['messages'][-1]['visual_context']=extra
             if s['web']:
                 status('searching','Planning Google search queries')
@@ -196,15 +302,22 @@ class Chats:
                     {'files':[f['name'] for f in documents],'passages':[p['citation'] for p in passages]})
             status('answering','Preparing Deep Thinking' if s['route']['thinking'] else 'Preparing your answer')
             messages=self.context(s,extra)
-            answer,metrics=inference(messages,s['route']['thinking']);s['metrics'].append(metrics)
+            if s['status']=='optimizing':status('answering','Preparing Deep Thinking' if s['route']['thinking'] else 'Preparing your answer')
+            actual_thinking=s['route']['thinking']
+            answer,metrics=inference(messages,actual_thinking);s['metrics'].append(metrics)
             if not answer:
                 status('answering','Reasoning limit reached; writing a concise final answer')
-                answer,metrics=inference(messages,False);s['metrics'].append(metrics)
+                actual_thinking=False;answer,metrics=inference(messages,False);s['metrics'].append(metrics)
                 s['warnings'].append('Reasoning reached its budget; retried with a bounded direct answer.')
             if not answer:raise ValueError('The model returned no answer; try a smaller question')
             if flag.is_set():raise ollama.InferenceError('Cancelled')
             if metrics.get('truncated'):s['warnings'].append('Answer reached its length limit. Ask a follow-up to continue.')
-            s['messages'].append({'role':'assistant','content':answer,'sources':s['sources'],'warnings':s['warnings'],'file_passages':passages})
+            s['messages'].append({'id':uuid.uuid4().hex,'role':'assistant','content':answer,'sources':s['sources'],
+                'warnings':s['warnings'],'file_passages':passages,'request_context':messages,
+                'generation':{'route':s['route'],'thinking':actual_thinking,'web':s['web'],
+                    'num_ctx':cfg['num_ctx'],'num_predict':4096 if actual_thinking else 2048,
+                    'options':metrics.get('options'),'hardware_mode':(s.get('hardware') or {}).get('mode')},
+                'optimization':s.get('optimization')})
             s['partial']='';self.event(s,'finishing','Answer ready · releasing model memory')
         except Exception as e:
             self.event(s,'cancelled' if flag.is_set() else 'failed',str(e)[:800])

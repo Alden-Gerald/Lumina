@@ -1,1 +1,53 @@
-ßY„E‘Òk-j»!ŠškŠ{T×«iÛ¦n×«š)Ú•11Û¦lŒ1Õµ¥¹„É½…‘µ…À()Q¡¥Ì™¥±”ÑÉ…­Ì‘ÕÉ…‰±”ÁÉ½‘ÕĞÁÉ¥½É¥Ñ¥•Ì½¹±ä¸½µÁ±•Ñ•¥µÁ±•µ•¹Ñ…Ñ¥½¸Á±…¹Ì°)Á•ÈµÑ…Í¬¡•­±¥ÍÑÌ°…¹µ½‘•°ÍÉ…Ñ µ•µ½Éä‘¼¹½Ğ‰•±½¹œ¥¸Ñ¡”É•Á½Í¥Ñ½Éä¸((ŒŒ½Õ¹‘…Ñ¥½¸¥¸Á±…”((´1½…°¡…Ğ…¹½‘”İ½É­ÍÁ…•Ìİ¥Ñ •áÁ±¥¥Ğµ½‘•°Í•±•Ñ¥½¸¸(´¥ÍÁ½Í…‰±”½‘¥¹œİ½É­ÍÁ…•Ì°¡…Í µ¡•­••‘¥ÑÌ°½™™±¥¹”½µµ…¹•á•ÕÑ¥½¸°(€Ù…±¥‘…Ñ¥½¸°É•Ù¥•Ü°‰…­ÕÁÌ°…¹Í½ÕÉ”µ½¹™±¥Ğ‘•Ñ•Ñ¥½¸¸(´MÑÉÕÑÕÉ•€İÉ½…‘µ…À•á•ÕÑ¥½¸İ¥Ñ ‰½Õ¹‘•É•½Ù•Éä…¹Í…Ù•ÁÉ½É•ÍÌ¸(´=ÁÑ¥½¹…°É•…µ½¹±ä¡•±Á•È…¹É•Ù¥Í¥½¸µµ…Ñ¡•‰…­É½Õ¹¡•­Ì¸(´½Õµ•¹Ğ…¹¥µ…”…ÑÑ…¡µ•¹ÑÌİ¥Ñ ‰½Õ¹‘•±½…°•áÑÉ…Ñ¥½¸¸(´½¹Ù•ÉÍ…Ñ¥½¸‰É…¹¡¥¹œ°™••‘‰…¬°¡¥ÍÑ½Éä°ÅÕ•Õ•Ì°ÍÑ½É…”½¹ÑÉ½±Ì°…¹(€Ù•ÉÍ¥½¹•µ•Ñ…‘…Ñ„‰…­ÕÀ½É•ÍÑ½É”¸(´M½Á•Á•ÉÍ½¹…°µ•µ½Éä°…ÑÑÉ¥‰ÕÑ•­¹½İ±•‘”É•ÑÉ¥•Ù…°°…¹¥¹ÍÁ•Ñ…‰±”(€ÁÉ•™•É•¹”É•½É‘Ì¸((ŒŒ9•áĞ((ŒŒŒA½ÉÑ…‰±”Í•ÑÕÀ((´I•Á±…”İ½É­ÍÑ…Ñ¥½¸µÍÁ•¥™¥Œ‘•™…Õ±ÑÌİ¥Ñ „Õ¥‘•™¥ÉÍĞµÉÕ¸½¹™¥ÕÉ…Ñ¥½¸¸(´•Ñ•Ğ½µÁ…Ñ¥‰±”¥¹™•É•¹”‰…­•¹‘Ì…¹É•½µµ•¹ÁÉ½™¥±•Ì™É½´µ•…ÍÕÉ•I4°(€YI4°…¹½¹Ñ•áĞÉ•ÅÕ¥É•µ•¹ÑÌ¸(´AÉ½Ù¥‘”É•ÁÉ½‘Õ¥‰±”Í•ÉÙ¥”¥¹ÍÑ…±±…Ñ¥½¸…¹ÕÁÉ…‘”‘½Õµ•¹Ñ…Ñ¥½¸¸((ŒŒŒY•É¥™¥…Ñ¥½¸…¹…•ÍÍ¥‰¥±¥Ñä((´‘…ÕÑ½µ…Ñ•‰É½İÍ•È½Ù•É…”™½ÈÑ¡”µ…¥¸¡…Ğ°½‘”°M•ÑÑ¥¹Ì°…¹É•½Ù•Éä(€™±½İÌ¸(´áÁ…¹­•å‰½…É°™½ÕÌ°½¹ÑÉ…ÍĞ°¹…ÉÉ½ÜµÍÉ••¸°…¹É•‘Õ•µµ½Ñ¥½¸¡•­Ì¸(´-••ÀÅÕ…±¥™¥…Ñ¥½¸É•ÍÕ±ÑÌÑ¥•Ñ¼•á…Ğµ½‘•°°¡…É‘İ…É”°…¹Í½ÕÉ”É•Ù¥Í¥½¹Ì¸((ŒŒŒ…Ñ„½¹ÑÉ½°((´%µÁÉ½Ù”ÍÑ½É…”ÁÉ•Ù¥•İÌ…¹É•™•É•¹”µ…İ…É”±•…¹ÕÀ‰•™½É”‘•±•Ñ¥½¸¸(´5…­”•áÁ½ÉÑÌ•…Í¥•ÈÑ¼¥¹ÍÁ•Ğİ¡¥±”½¹Ñ¥¹Õ¥¹œÑ¼•á±Õ‘”É•‘•¹Ñ¥…±Ì…¹É…Ü(€ÁÉ¥Ù…Ñ”…ÉÑ¥™…ÑÌ‰ä‘•™…Õ±Ğ¸(´áÑ•¹ÁÉ½Ù•¹…¹”Ù¥•İÌ™½Èµ•µ½É¥•Ì°­¹½İ±•‘”Á…ÍÍ…•Ì°…¹İ•ˆÍ½ÕÉ•Ì¸((ŒŒ1…Ñ•È((´MÕÁÁ½ÉĞ…‘‘¥Ñ¥½¹…°±½…°¥¹™•É•¹”‰…­•¹‘Ìİ¥Ñ¡½ÕĞİ•…­•¹¥¹œÉ•Í½ÕÉ”…Ñ•Ì¸(´‘•Ù…±Õ…Ñ•°É•Ù•ÉÍ¥‰±”±½…°…‘…ÁÑ•ÈÑÉ…¥¹¥¹œ½¹±äİ¡•¸„ÍÕÁÁ½ÉÑ•ÑÉ…¥¹•È°(€‘•Ñ•Éµ¥¹¥ÍÑ¥Œ‘…Ñ„ÍÁ±¥Ğ°…Á…‰¥±¥Ñä¡•­Ì°…¹É½±±‰…¬Á…Ñ …É”…Ù…¥±…‰±”¸(´A…­…”¡…É‘İ…É”ÁÉ•Í•ÑÌ½¹ÑÉ¥‰ÕÑ•™É½´Ù•É¥™¥•¥¹ÍÑ…±±…Ñ¥½¹Ì¸((ŒŒ•¥Í¥½¸ÉÕ±”()É½…‘µ…À¥Ñ•´¥ÌÉ•…‘äÑ¼Í¡¥À½¹±äİ¡•¸¥ÑÌ‰•¡…Ù¥½È¥Ì½‰Í•ÉÙ…‰±”°¥ÑÌ™…¥±ÕÉ”)µ½‘”¥Ì±•…È°ÕÍ•È‘…Ñ„É•µ…¥¹ÌÉ•½Ù•É…‰±”°…¹µ•…¹¥¹™Õ°¡•­Ì½Ù•ÈÑ¡”)¡…¹”¸5½‘•°É•Ù¥•Ü…±½¹”¥Ì¹½Ğ½µÁ±•Ñ¥½¸•Ù¥‘•¹”¸(
+# Lumina roadmap
+
+This file tracks durable product priorities only. Completed implementation plans,
+per-task checklists, and model scratch memory do not belong in the repository.
+
+## Foundation in place
+
+- Local Chat and Code workspaces with explicit model selection.
+- Disposable coding workspaces, hash-checked edits, offline command execution,
+  validation, review, backups, and source-conflict detection.
+- Structured 7B roadmap execution with bounded recovery and saved progress.
+- Optional read-only helper and revision-matched background checks.
+- Document and image attachments with bounded local extraction.
+- Conversation branching, feedback, history, queues, storage controls, and
+  versioned metadata backup/restore.
+- Scoped personal memory, attributed knowledge retrieval, and inspectable
+  preference records.
+
+## Next
+
+### Portable setup
+
+- Replace workstation-specific defaults with a guided first-run configuration.
+- Detect compatible inference backends and recommend profiles from measured RAM,
+  VRAM, and context requirements.
+- Provide reproducible service installation and upgrade documentation.
+
+### Verification and accessibility
+
+- Add automated browser coverage for the main Chat, Code, Settings, and recovery
+  flows.
+- Expand keyboard, focus, contrast, narrow-screen, and reduced-motion checks.
+- Keep qualification results tied to exact model, hardware, and source revisions.
+
+### Data control
+
+- Improve storage previews and reference-aware cleanup before deletion.
+- Make exports easier to inspect while continuing to exclude credentials and raw
+  private artifacts by default.
+- Extend provenance views for memories, knowledge passages, and web sources.
+
+## Later
+
+- Support additional local inference backends without weakening resource gates.
+- Add evaluated, reversible local adapter training only when a supported trainer,
+  deterministic data split, capability checks, and rollback path are available.
+- Package hardware presets contributed from verified installations.
+
+## Decision rule
+
+A roadmap item is ready to ship only when its behavior is observable, its failure
+mode is clear, user data remains recoverable, and meaningful checks cover the
+change. Model review alone is not completion evidence.

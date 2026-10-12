@@ -14,7 +14,7 @@ TOOL_SCHEMAS = {
     "list_dir": {"path": "relative directory, default .", "offset": "integer, default 0"},
     "search_code": {"query": "literal search string", "path": "relative directory, default ."},
     "read_file": {"path": "relative file", "start_line": "integer, default 1", "line_count": "integer, max 160"},
-    "file_patch": {"path": "relative file", "expected_sha256": "hash from read_file", "old_text": "unique exact text", "new_text": "replacement text"},
+    "file_patch": {"path": "relative file", "expected_sha256": "hash from read_file", "old_text": "exact text", "new_text": "replacement text", "occurrence": "optional 1-based match when old_text repeats"},
     "create_file": {"path": "new relative file", "content": "UTF-8 source text"},
     "run_command": {"argv": "array of strings", "cwd": "relative directory, default .", "timeout_seconds": "integer, max 120"},
     "verify": {}, "finish": {}, "stop": {"reason": "why progress is blocked"},
@@ -29,6 +29,7 @@ ACTION_SCHEMA = {
             "query": {"type": "string"}, "start_line": {"type": "integer"},
             "line_count": {"type": "integer"}, "expected_sha256": {"type": "string"},
             "old_text": {"type": "string"}, "new_text": {"type": "string"},
+            "occurrence": {"type": "integer", "minimum": 1, "maximum": 100},
             "content": {"type": "string"}, "argv": {"type": "array", "items": {"type": "string"}},
             "cwd": {"type": "string"}, "timeout_seconds": {"type": "integer"},
             "reason": {"type": "string"}}, "additionalProperties": False},
@@ -124,7 +125,7 @@ class Tools:
             Path(temp).unlink(missing_ok=True)
         return hashlib.sha256(data).hexdigest()
 
-    def file_patch(self, path, expected_sha256, old_text, new_text):
+    def file_patch(self, path, expected_sha256, old_text, new_text, occurrence=None):
         p = self._path(path)
         if p.relative_to(self.root).as_posix() in self.protected_tests:
             raise ValueError("Existing tests are protected. Repair the implementation or add a separate regression test.")
@@ -139,11 +140,21 @@ class Tools:
         if len(old_text) + len(new_text) > 18000 or new_text.count("\n") > 160:
             raise ValueError("Patch too large. Split the edit into smaller changes.")
         text = data.decode("utf-8")
-        if text.count(old_text) != 1:
-            raise ValueError("old_text must match exactly once. Read a more specific source range.")
+        count = text.count(old_text)
+        if occurrence is None and count != 1:
+            raise ValueError("old_text must match exactly once, or provide its 1-based occurrence.")
+        if occurrence is not None and (type(occurrence) is not int or not 1 <= occurrence <= min(count, 100)):
+            raise ValueError(f"occurrence must select one of the {count} exact matches")
         if old_text == new_text:
             raise ValueError("Patch makes no change")
-        updated = text.replace(old_text, new_text, 1).encode("utf-8")
+        if occurrence is None:
+            updated_text = text.replace(old_text, new_text, 1)
+        else:
+            start = -len(old_text)
+            for _ in range(occurrence):
+                start = text.find(old_text, start + len(old_text))
+            updated_text = text[:start] + new_text + text[start + len(old_text):]
+        updated = updated_text.encode("utf-8")
         sha = self._write(p, updated, stat.S_IMODE(p.stat().st_mode))
         return {"path": path, "sha256": sha, "changed": True}
 

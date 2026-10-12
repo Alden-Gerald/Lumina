@@ -7,7 +7,7 @@ import unittest
 import io
 from PIL import Image
 from unittest.mock import patch
-from local_coder.chat import Chats,SYSTEM
+from local_coder.chat import Chats,SYSTEM,fit_synthesis_context
 from local_coder.search import public_url,relevant,search
 
 class ChatTests(unittest.TestCase):
@@ -26,6 +26,56 @@ class ChatTests(unittest.TestCase):
             self.assertEqual(len(calls[-1]),4);self.assertIn('Eigenvalues',calls[-1][2]['content'])
             self.assertEqual(c.get(s['id'])['history_pairs_used'],1)
             self.assertIn('untrusted',SYSTEM)
+
+    def test_structured_answer_decomposes_solves_and_synthesizes_with_7b_route(self):
+        with tempfile.TemporaryDirectory() as d:
+            calls=[]
+            def infer(messages,deep,flag,deadline,progress):
+                calls.append(messages);system=messages[0]['content']
+                if 'Create an answer roadmap' in system:
+                    return json.dumps({'goal':'Explain the combined training design','subproblems':[
+                        {'question':'What should supervised training teach?','purpose':'Define core behavior'},
+                        {'question':'What should preferences improve?','purpose':'Define ranking behavior'}],
+                        'final_checks':['Connect both stages']}),{}
+                if 'Solve exactly one bounded subproblem' in system:
+                    part='Supervised training teaches demonstrations.' if 'supervised' in messages[-1]['content'].lower() else 'Preferences rank better answers.'
+                    return json.dumps({'answer':part,'limitations':[]}),{}
+                if 'Synthesize one coherent final answer' in system:
+                    return json.dumps({'answer':'Use supervised examples first, then preference pairs to improve answer selection.','covered':[1,2]}),{}
+                self.fail('Unexpected direct generation')
+            c=Chats(Path(d)/'chats',infer)
+            s=c.start('Explain how supervised training and preference tuning should work together in Lumina',
+                deep=True,structured=True);self.wait(c);result=c.get(s['id'])
+            self.assertEqual(result['status'],'idle',result['message'])
+            self.assertEqual(result['route']['choice'],'structured')
+            self.assertEqual(len(calls),4)
+            answer=result['messages'][-1]
+            self.assertEqual(answer['generation']['workflow'],'decompose-solve-synthesize')
+            self.assertEqual(answer['answer_plan']['covered'],[1,2])
+            self.assertTrue(all(part['status']=='done' for part in answer['answer_plan']['subproblems']))
+            self.assertIn('preference pairs',answer['content'])
+
+    def test_structured_answer_bypasses_short_greeting(self):
+        with tempfile.TemporaryDirectory() as d:
+            calls=[]
+            def infer(messages,*args):calls.append(messages);return 'Hello!',{}
+            c=Chats(Path(d)/'chats',infer);s=c.start('Hello there',deep=True,structured=True);self.wait(c)
+            result=c.get(s['id']);self.assertEqual(result['route']['choice'],'study')
+            self.assertEqual(result['messages'][-1]['generation']['workflow'],'direct')
+            self.assertEqual(len(calls),1)
+
+    def test_synthesis_keeps_all_parts_inside_a_small_context_window(self):
+        messages=[{'role':'system','content':'Combine the results.'},{'role':'user','content':'Explain the topic.'}]
+        packet={'goal':'Explain','final_checks':['Cover every part'],
+            'subproblem_results':[{'part':i,'question':f'Part {i}','purpose':'Explain',
+                'answer':'evidence '*300,'limitations':[]} for i in range(1,6)]}
+        def count(items,*_):return sum(len(item['content']) for item in items)
+        with patch('local_coder.chat.estimate',side_effect=count):
+            fitted,compact=fit_synthesis_context(messages,packet,'roadmap',2100)
+        self.assertLessEqual(count(fitted),2100)
+        self.assertEqual([part['part'] for part in compact['subproblem_results']],[1,2,3,4,5])
+        self.assertTrue(all(part['answer'] for part in compact['subproblem_results']))
+        self.assertEqual(len(packet['subproblem_results'][0]['answer']),2700)
     def test_live_activity_records_phases_but_no_private_thinking(self):
         with tempfile.TemporaryDirectory() as d:
             ready=threading.Event();release=threading.Event()

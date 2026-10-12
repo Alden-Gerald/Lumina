@@ -109,7 +109,7 @@ def inventory(workspace: Path) -> dict:
     return result
 
 def apply_changes(state: dict, run_dir: Path) -> dict:
-    if state["status"] != "completed" or not state.get("validated_inventory"):
+    if state["status"] not in {"completed", "applying"} or not state.get("validated_inventory"):
         raise ValueError("Only a completed and validated run can be applied")
     workspace = run_dir / "workspace"
     if inventory(workspace) != state["validated_inventory"]:

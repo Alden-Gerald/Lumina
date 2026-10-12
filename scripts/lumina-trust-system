@@ -1,0 +1,10 @@
+#!/bin/sh
+set -eu
+
+certificate=/home/gerald/.local/share/local-coder/lan/lumina-ca.crt
+target=/etc/pki/ca-trust/source/anchors/lumina-local-ca.crt
+install -m 0644 "$certificate" "$target"
+update-ca-trust extract
+openssl verify -CAfile /etc/ssl/certs/ca-bundle.crt \
+    -verify_hostname lumina.local \
+    /home/gerald/.local/share/local-coder/lan/cert.pem

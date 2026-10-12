@@ -27,6 +27,15 @@ class ToolsTests(unittest.TestCase):
         self.assertEqual((self.root/"a.py").read_text(),"value = 2\n")
         self.assertEqual(result["sha256"],hashlib.sha256(b"value = 2\n").hexdigest())
         with self.assertRaisesRegex(ValueError,"hash"):self.tools.file_patch("a.py",data["sha256"],"2","3")
+    def test_occurrence_selects_one_repeated_exact_match(self):
+        (self.root/"a.py").write_text("item = 1\nitem = 1\n")
+        data=self.tools.read_file("a.py")
+        with self.assertRaisesRegex(ValueError,"occurrence"):
+            self.tools.file_patch("a.py",data["sha256"],"item = 1","item = 2")
+        with self.assertRaisesRegex(ValueError,"2 exact matches"):
+            self.tools.file_patch("a.py",data["sha256"],"item = 1","item = 3",occurrence=3)
+        result=self.tools.file_patch("a.py",data["sha256"],"item = 1","item = 2",occurrence=2)
+        self.assertEqual((self.root/"a.py").read_text(),"item = 1\nitem = 2\n")
     def test_metadata_secret_and_symlink_paths_are_rejected(self):
         (self.root/"alias").symlink_to(self.root/".git/config")
         for path in ["../outside","/etc/passwd",".git/config",".env","alias"]:

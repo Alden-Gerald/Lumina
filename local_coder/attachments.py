@@ -65,7 +65,11 @@ class FileStore:
                 metadata=self.images.save(data,name);metadata.update(kind='image',type='Image')
                 self._write(self._id(metadata['id']).with_suffix('.json'),metadata)
                 return metadata
-            if len(list(self.root.glob('*.json')))>=100:
+            active=0
+            for stored in self.root.glob('*.json'):
+                try:active+=not bool(json.loads(stored.read_text()).get('archived',False))
+                except (OSError,ValueError):active+=1
+            if active>=100:
                 raise ValueError('Local file storage is full; archive old attachments before uploading more.')
             with tempfile.TemporaryDirectory(prefix='.reading-',dir=self.root) as d:
                 input=Path(d)/'input';input.write_bytes(data);input.chmod(0o600)
@@ -110,6 +114,44 @@ class FileStore:
         files=[self.load(id) for id in ids]
         if sum(is_image(f) for f in files)>MAX_IMAGES:raise ValueError('Attach at most two images per message.')
         return files
+
+    def references(self,id,chats_root=None,runs_root=None):
+        self.load(id);references=[]
+        for kind,root in [('conversation',Path(chats_root or self.root.parent/'chats')),('task',Path(runs_root or self.root.parent/'runs'))]:
+            for state_path in root.glob('*/state.json'):
+                try:state=json.loads(state_path.read_text())
+                except (OSError,ValueError):continue
+                found=any(item.get('id')==id for item in state.get('attachments',[]) if isinstance(item,dict))
+                if not found:
+                    found=any(any(item.get('id')==id for item in message.get('attachments',[]) if isinstance(item,dict)) for message in state.get('messages',[]))
+                if found:references.append({'kind':kind,'id':state.get('id'),'title':state.get('title') or state.get('task','Untitled')})
+        return references
+
+    def inventory(self,include_archived=True):
+        items=[]
+        for path in self.root.glob('*.json'):
+            try:
+                meta=json.loads(path.read_text());self.load(meta['id'])
+                if not include_archived and meta.get('archived'):continue
+                refs=self.references(meta['id']);items.append({**meta,'references':refs,'reference_count':len(refs)})
+            except (OSError,ValueError,KeyError):continue
+        return {'items':sorted(items,key=lambda item:item.get('name','').lower()),'files':len(items),
+                'bytes':sum(item.get('bytes',0) for item in items),'active_files':sum(not item.get('archived',False) for item in items)}
+
+    def archive(self,id,archived=True):
+        if not isinstance(archived,bool):raise ValueError('Archived must be true or false')
+        meta=self.load(id);meta['archived']=archived;self._write(self._id(id).with_suffix('.json'),meta)
+        return {'id':id,'archived':archived,'references':self.references(id)}
+
+    def delete(self,id):
+        references=self.references(id)
+        if references:raise ValueError('Attachment is still referenced by saved work; archive it or remove those references first.')
+        base=self._id(id);removed=[]
+        for suffix in ('.json','.bin','.text','.jpg'):
+            path=base.with_suffix(suffix)
+            if path.exists() and not path.is_symlink():path.unlink();removed.append(path.name)
+        if not removed:raise ValueError('Attachment not found')
+        return {'deleted':id,'removed_files':removed}
 
     def messages(self,*args,**kwargs):return self.images.messages(*args,**kwargs)
 

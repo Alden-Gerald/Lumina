@@ -1,0 +1,17 @@
+[Unit]
+Description=Lumina HTTPS login for the home network
+Wants=local-coder.service
+After=local-coder.service
+
+[Service]
+ExecStart=/home/gerald/local-coder/.venv/bin/python -m local_coder.lan_gateway
+WorkingDirectory=/home/gerald/local-coder
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=yes
+
+[Install]
+WantedBy=default.target

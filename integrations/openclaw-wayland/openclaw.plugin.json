@@ -1,0 +1,22 @@
+{
+  "id": "local-wayland",
+  "name": "Local Wayland Desktop",
+  "description": "Screen and input tools for this Hyprland Wayland desktop.",
+  "version": "0.1.0",
+  "configSchema": {
+    "type": "object",
+    "properties": {},
+    "additionalProperties": false
+  },
+  "activation": {
+    "onStartup": true
+  },
+  "contracts": {
+    "tools": [
+      "wayland_screenshot",
+      "wayland_click",
+      "wayland_type",
+      "wayland_key"
+    ]
+  }
+}

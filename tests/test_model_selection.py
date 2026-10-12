@@ -7,6 +7,7 @@ from local_coder.settings import PROFILES
 
 class ModelSelectionTests(unittest.TestCase):
     def test_auto_prefers_reasoning_then_coding_then_short_chat(self):
+        self.assertEqual(choose('Explain how these training methods work together',True,ram_gib=24,structured=True)['choice'],'structured')
         self.assertEqual(choose('Explain Python recursion',True,ram_gib=24)['choice'],'study')
         self.assertEqual(choose('Debug my Quickshell QML',False,ram_gib=24)['choice'],'coding')
         self.assertEqual(choose('Hello there',False,ram_gib=24)['choice'],'fast')

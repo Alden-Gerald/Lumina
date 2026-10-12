@@ -25,12 +25,14 @@ def main():
     for name in ["show","diff","cancel","apply"]:
         sub.add_parser(name).add_argument("run_id")
     r=sub.add_parser("run");r.add_argument("task");r.add_argument("--source",default=str(DEFAULT_PROJECT))
-    r.add_argument("--profile",choices=[k for k,v in PROFILES.items() if not v.get('auxiliary')],default="quality")
+    r.add_argument("--profile",choices=[k for k,v in PROFILES.items() if not v.get('auxiliary')],default="roadmap")
     r.add_argument("--no-team",action="store_true",help="Disable the optional GTX advisory helper")
     r.add_argument("--acceptance",default="");r.add_argument("--check",action="append",default=[])
     r.add_argument("--no-wait",action="store_true")
     m=sub.add_parser("mcp");m.add_argument("--source",default=str(DEFAULT_PROJECT))
     m.add_argument("--http",action="store_true");m.add_argument("--port",type=int,default=8001)
+    h=sub.add_parser("handoff-mcp");h.add_argument("--source",default=str(DEFAULT_PROJECT))
+    h.add_argument("--http",action="store_true");h.add_argument("--port",type=int,default=8002)
     args=p.parse_args()
     try:
         if args.command=="gpu-status":
@@ -47,6 +49,9 @@ def main():
             return serve(port=args.port)
         if args.command=="mcp":
             from .mcp_server import serve
+            return serve(Path(args.source),args.http,args.port)
+        if args.command=="handoff-mcp":
+            from .handoff_server import serve
             return serve(Path(args.source),args.http,args.port)
         if args.command=="doctor":
             from .sandbox import Sandbox

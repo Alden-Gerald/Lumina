@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Local Coder</title><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
+<body><script id="session" type="application/json">{"token":"__TOKEN__"}</script>
+<div class="layout"><aside><div class="brand"><span class="logo">⌘</span><div>Local Coder<small>Your private developer</small></div></div>
+<button id="new-task" class="secondary wide">＋ New task</button><h2>Recent work</h2><nav id="runs"></nav>
+<div class="hardware"><span class="dot"></span> Runs entirely on this computer<p id="hardware-mode">RX 6600 · 8GB GPU<br>Up to 16GB system RAM<br>One model at a time</p></div></aside>
+<main><header><div><span class="eyebrow">ORBIT QUICKSHELL</span><h1 id="heading">Build one useful feature.</h1></div><span id="connection" class="pill">Connecting</span></header>
+<section id="composer" class="card"><label for="task">What should your shell do?</label>
+<textarea id="task" rows="5" placeholder="For example: add a compact battery indicator to the bottom bar. Reuse the existing power service, show a charging icon, and keep the current bar layout."></textarea>
+<label for="acceptance">How will you know it works? <span>Optional</span></label><textarea id="acceptance" rows="2" placeholder="Describe the behavior and edge cases that matter to you."></textarea>
+<div class="form-row"><div><label for="profile">Model</label><select id="profile"><option value="power">Coding · 30B MoE · 32k context</option><option value="quality">Accuracy · 14B · 16k context</option><option value="balanced">Balanced · 9B · 8k context</option></select></div><button id="start" class="primary">Plan and build →</button></div>
+<details class="advanced"><summary>Project and checks</summary><label for="source">Project folder</label><input id="source" value="/home/gerald/dotfiles/quickshell"><label for="check">Required check command <span>Optional</span></label><input id="check" placeholder="For example: node --test tests/window-title.test.js"><p>Commands run offline in the task sandbox. Source files are edited through precise patches.</p></details>
+<p class="note">Each task starts from your current files, builds in a separate workspace, and creates a checked local commit. You choose when to apply the result.</p></section>
+<section id="work" hidden><div class="card progress"><div><span id="status" class="pill">Preparing</span><h2 id="message">Preparing your task</h2><p id="task-title"></p></div><button id="cancel" class="secondary">Stop task</button></div>
+<div class="work-grid"><section class="card"><h2>Plan</h2><ol id="plan"></ol><h2>Progress</h2><div id="events" class="events"></div></section><section class="card"><h2>Result</h2><div id="result">The implementation will appear here.</div><div id="checks"></div><div id="apply-box" hidden><button id="apply" class="primary wide">Apply checked changes</button><p class="note">Source files must still match the starting snapshot. A backup is kept. Reload Quickshell when ready.</p></div><h2>Changes</h2><pre id="diff" class="diff">No edits yet.</pre></section></div></section>
+<div id="error" class="error" hidden></div><footer>Local inference · Isolated commands · Bounded steps · Checked commits</footer></main></div></body></html>

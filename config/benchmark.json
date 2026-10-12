@@ -1,0 +1,12 @@
+{
+  "task": "Add Zen Browser recognition to the existing concise taskbar title utility in orbit-shell/utils/WindowTitle.js. Recognize zen, zen-browser, and app.zen_browser.zen as browsers. Preserve existing browser, code-editor and ordinary application behavior. Make the smallest surgical edit; no unrelated refactors.",
+  "source": "/home/gerald/dotfiles/quickshell",
+  "acceptance": "All three Zen identities produce contextual browser labels. Firefox and non-browser labels remain unchanged. New Tab remains the application name.",
+  "test_commands": [
+    [
+      "node",
+      "-e",
+      "const fs=require('fs'),vm=require('vm'),assert=require('assert'); const ctx={};vm.createContext(ctx);vm.runInContext(fs.readFileSync('orbit-shell/utils/WindowTitle.js','utf8').replace(/^\\.pragma library\\s*/,'') ,ctx);for(const id of ['zen','zen-browser','app.zen_browser.zen'])assert.strictEqual(ctx.conciseTitle('Documentation \u2014 Local AI \u2014 Zen Browser','Zen Browser',id),'Zen Browser - Local AI',id);assert.strictEqual(ctx.conciseTitle('Documentation \u2014 Mozilla Firefox','Mozilla Firefox','firefox'),'Mozilla Firefox - Documentation');assert.strictEqual(ctx.conciseTitle('Untitled \u2014 Editor','Editor','plain-editor'),'Editor \u2014 Untitled');assert.strictEqual(ctx.conciseTitle('New Tab \u2014 Zen Browser','Zen Browser','zen-browser'),'Zen Browser');console.log('PASS: Zen identities, Firefox regression, non-browser regression, new tab');"
+    ]
+  ]
+}

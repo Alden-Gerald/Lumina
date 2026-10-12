@@ -1,0 +1,16 @@
+[Unit]
+Description=Local Coder dashboard and coding controller
+Wants=local-coder-ollama.service
+After=local-coder-ollama.service
+
+[Service]
+ExecStart=/home/gerald/local-coder/.venv/bin/local-coder serve
+WorkingDirectory=/home/gerald/local-coder
+Environment=PYTHONUNBUFFERED=1
+MemoryMax=512M
+TasksMax=64
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

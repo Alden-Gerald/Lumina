@@ -1,0 +1,10 @@
+{
+  "name": "Orbit Quickshell",
+  "source": "/home/gerald/dotfiles/quickshell",
+  "entrypoint": "orbit-shell/shell.qml",
+  "profile": "quickshell",
+  "instructions": "Read orbit-shell/README.md Architecture and the relevant source. Shared configuration belongs in config/OrbitConfiguration.qml; shared services in services/OrbitServices.qml; each monitor is composed by bar/OrbitMonitorSurface.qml. Widgets get explicit inputs. Keep appearance/timing in Appearance.qml and Behavior.qml. Preserve popup teardown and reactive QML bindings. Do not restart Orbit or run qs ipc automatically. No new service is needed for a widget-only feature.",
+  "model_profile": "quality",
+  "limits": {"max_steps": 24, "max_seconds": 1800, "max_files": 8, "max_changed_lines": 400},
+  "validation": "QML parser and lint errors, Bash/Python/JS syntax, configured task checks, sequential model review; legacy warnings retained as baseline"
+}
